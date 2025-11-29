@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediFlow Clinical Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #0066cc; /* Medical Blue */
+        --primary-dark: #004c99;
+        --secondary: #e6f0fa;
+        --bg-color: #f8fafc;
+        --sidebar-bg: #ffffff;
+        --border-color: #e2e8f0;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --thought-bg: #f1f5f9;
+        --thought-border: #cbd5e1;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        background: var(--bg-color);
+        color: var(--text-primary);
+        height: 100vh;
+        display: flex;
+        overflow: hidden;
+      }
+
+      /* --- Sidebar --- */
+      .sidebar {
+        width: 280px;
+        background: var(--sidebar-bg);
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+      }
+
+      .sidebar-header {
+        padding: 20px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .logo-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--primary);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+      }
+
+      .brand-name {
+        font-weight: 700;
+        font-size: 18px;
+        color: var(--text-primary);
+      }
+
+      .new-chat-wrapper {
+        padding: 15px 20px;
+      }
+
+      .new-chat-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 4px 6px -1px rgba(0, 102, 204, 0.2);
+      }
+
+      .new-chat-btn:hover {
+        background: var(--primary-dark);
+        transform: translateY(-1px);
+      }
+
+      .chat-history {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+      }
+
+      .history-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        font-weight: 600;
+        padding: 10px;
+        letter-spacing: 0.5px;
+      }
+
+      .chat-item {
+        padding: 12px;
+        margin-bottom: 4px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+      }
+
+      .chat-item:hover {
+        background: var(--secondary);
+      }
+
+      .chat-item.active {
+        background: var(--secondary);
+        border-color: #bfdbfe;
+        border-left: 3px solid var(--primary);
+      }
+
+      .chat-name {
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .chat-meta {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+      }
+
+      /* --- Main Content --- */
+      .main-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+
+      .top-bar {
+        height: 60px;
+        background: white;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      .chat-info h2 {
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .status-badge {
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        background: #ecfdf5;
+        color: #059669;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        background: #10b981;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+      }
+
+      .disclaimer-banner {
+        background: #fffbeb;
+        border-bottom: 1px solid #fcd34d;
+        color: #92400e;
+        padding: 10px 24px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      /* --- Messages Area --- */
+      .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        background: #f8fafc;
+      }
+
+      .message-wrapper {
+        display: flex;
+        flex-direction: column;
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .message-wrapper.user {
+        align-items: flex-end;
+      }
+
+      .message-wrapper.assistant {
+        align-items: flex-start;
+      }
+
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+        font-size: 14px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .avatar.user {
+        background: var(--text-primary);
+        color: white;
+      }
+
+      .avatar.assistant {
+        background: white;
+        color: var(--primary);
+        border: 1px solid var(--border-color);
+      }
+
+      /* --- Thought Process / Agent Steps --- */
+      .thought-process {
+        width: 100%;
+        max-width: 90%;
+        margin-bottom: 8px;
+        font-size: 13px;
+      }
+
+      .thought-item {
+        background: var(--thought-bg);
+        border: 1px solid var(--thought-border);
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 6px;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        transition: all 0.3s ease-out;
+        opacity: 1;
+      }
+
+      .thought-item.active {
+        border-color: var(--primary);
+        background: #f0f7ff;
+      }
+
+      .thought-item.fading {
+        opacity: 0;
+        transform: translateY(-10px);
+        max-height: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      .agent-badge {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: #e2e8f0;
+        color: #475569;
+        white-space: nowrap;
+      }
+
+      .agent-badge.receptionist {
+        background: #e0e7ff;
+        color: #4338ca;
+      }
+      .agent-badge.clinical {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .agent-badge.tool {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      /* --- Message Bubbles --- */
+      .message-content {
+        padding: 16px 20px;
+        border-radius: 12px;
+        line-height: 1.6;
+        font-size: 15px;
+        position: relative;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .message-wrapper.user .message-content {
+        background: var(--primary);
+        color: white;
+        border-radius: 12px 12px 0 12px;
+      }
+
+      .message-wrapper.assistant .message-content {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0 12px 12px 12px;
+        width: 100%;
+        max-width: 90%;
+      }
+
+      /* Markdown Styles */
+      .message-content h1,
+      .message-content h2,
+      .message-content h3 {
+        margin: 1em 0 0.5em;
+        font-weight: 600;
+        color: inherit;
+      }
+      .message-content h3 {
+        font-size: 1.1em;
+      }
+      .message-content p {
+        margin-bottom: 0.8em;
+      }
+      .message-content ul,
+      .message-content ol {
+        padding-left: 1.5em;
+        margin-bottom: 0.8em;
+      }
+
+      .message-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1em 0;
+        font-size: 14px;
+      }
+      .message-content th,
+      .message-content td {
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+      }
+      .message-content th {
+        background: #f8fafc;
+        font-weight: 600;
+      }
+
+      /* --- Input Area --- */
+      .input-area {
+        background: white;
+        padding: 20px 24px;
+        border-top: 1px solid var(--border-color);
+      }
+
+      .input-wrapper {
+        position: relative;
+        max-width: 800px;
+        margin: 0 auto;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        background: #f8fafc;
+        padding: 8px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+      }
+
+      .input-wrapper:focus-within {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+        background: white;
+      }
+
+      textarea {
+        flex: 1;
+        border: none;
+        background: transparent;
+        padding: 10px;
+        font-size: 15px;
+        font-family: inherit;
+        resize: none;
+        outline: none;
+        max-height: 150px;
+        min-height: 24px;
+      }
+
+      .send-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+      }
+
+      .send-btn:hover {
+        background: var(--primary-dark);
+      }
+      .send-btn:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+
+      /* --- Animations --- */
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Empty State */
+      .empty-state {
+        text-align: center;
+        margin-top: 10vh;
+        color: var(--text-secondary);
+      }
+      .empty-state i {
+        font-size: 48px;
+        color: #cbd5e1;
+        margin-bottom: 16px;
+      }
+
+      /* Streaming Cursor */
+      .cursor {
+        display: inline-block;
+        width: 2px;
+        height: 1em;
+        background: var(--primary);
+        margin-left: 2px;
+        animation: blink 1s step-end infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon"><i class="fas fa-heart-pulse"></i></div>
+        <div class="brand-name">MediFlow</div>
+      </div>
+
+      <div class="new-chat-wrapper">
+        <button class="new-chat-btn">
+          <i class="fas fa-plus"></i> New Consultation
+        </button>
+        <a
+          href="/api/patients"
+          class="new-chat-btn"
+          style="
+            margin-top: 10px;
+            text-align: center;
+            text-decoration: none;
+            display: block;
+            background: #f3f8ff;
+            color: var(--primary);
+            border: 1px solid var(--border-color);
+          "
+        >
+          <i class="fas fa-users"></i> View Dummy Patients
+        </a>
+      </div>
+
+      <div class="history-label">Recent Patients</div>
+      <div class="chat-history" id="chatHistory"></div>
+    </div>
+
+    <div class="main-container">
+      <div class="top-bar">
+        <div class="chat-info">
+          <h2 id="chatTitle">New Consultation</h2>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center">
+          <a
+            class="back-link"
+            href="/api/documentation"
+            style="
+              background: #fff;
+              border: 1px solid var(--border-color);
+              padding: 8px 10px;
+              color: var(--primary);
+              text-decoration: none;
+              border-radius: 8px;
+            "
+            ><i class="fas fa-book"></i> API Docs</a
+          >
+          <div class="status-badge">
+            <div class="status-dot"></div>
+            System Operational
+          </div>
+        </div>
+      </div>
+
+      <div class="disclaimer-banner">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span
+          ><strong>Clinical Warning:</strong> AI-generated responses. Verify all
+          diagnoses and treatment plans with a qualified Medical
+          Practitioner.</span
+        >
+      </div>
+
+      <div class="messages-container" id="messagesContainer">
+        <div class="empty-state">
+          <i class="fas fa-user-md"></i>
+          <h3>Clinical Decision Support Agent</h3>
+          <p>
+            Ready to assist with triage, differential diagnosis, and patient
+            intake.
+          </p>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            id="messageInput"
+            placeholder="Enter patient symptoms or query..."
+            rows="1"
+          ></textarea>
+          <button class="send-btn" id="sendButton">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "http://localhost:5000/api";
+
+      // DOM Elements
+      const elements = {
+        container: document.getElementById("messagesContainer"),
+        input: document.getElementById("messageInput"),
+        btn: document.getElementById("sendButton"),
+        history: document.getElementById("chatHistory"),
+        newChat: document.querySelector(".new-chat-btn"),
+        title: document.getElementById("chatTitle"),
+      };
+
+      // State
+      let state = {
+        chats: JSON.parse(localStorage.getItem("mediflow_chats")) || [],
+        currentChatId: null,
+        currentThreadId: null,
+        isStreaming: false,
+      };
+
+      // --- Initialization ---
+      function init() {
+        if (state.chats.length > 0) {
+          loadChat(state.chats[0].id);
+        }
+        renderHistory();
+        setupEventListeners();
+      }
+
+      function setupEventListeners() {
+        // Auto-resize textarea
+        elements.input.addEventListener("input", function () {
+          this.style.height = "auto";
+          this.style.height = Math.min(this.scrollHeight, 150) + "px";
+        });
+
+        // Submit handlers
+        elements.input.addEventListener("keydown", (e) => {
+          // Enter submits (unless Shift is held for new line)
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault(); // Prevent new line
+            handleSend();
+          }
+          // Shift+Enter allows new line (default behavior)
+        });
+        elements.btn.addEventListener("click", handleSend);
+
+        // New Chat
+        elements.newChat.addEventListener("click", createNewChat);
+      }
+
+      // --- Core Chat Logic ---
+
+      async function handleSend() {
+        const text = elements.input.value.trim();
+        if (!text || state.isStreaming) return;
+
+        if (!state.currentChatId) createNewChat();
+
+        // UI Updates
+        elements.input.value = "";
+        elements.input.style.height = "auto";
+        elements.input.disabled = true;
+        elements.btn.disabled = true;
+
+        // Save user message and render it in the main UI (show human + AI only)
+        saveMessageToState(text, true);
+        appendMessageToUI("user", text);
+
+        // Prepare Assistant Container
+        const assistantMsgDiv = createAssistantContainer();
+        elements.container.appendChild(assistantMsgDiv);
+        scrollToBottom();
+
+        try {
+          await streamResponse(text, assistantMsgDiv);
+        } catch (err) {
+          assistantMsgDiv.querySelector(
+            ".message-content"
+          ).innerHTML += `<div style="color:red; margin-top:10px;">Error: ${err.message}</div>`;
+        } finally {
+          elements.input.disabled = false;
+          elements.btn.disabled = false;
+          elements.input.focus();
+        }
+      }
+
+      async function streamResponse(message, containerDiv) {
+        state.isStreaming = true;
+        const thoughtsContainer =
+          containerDiv.querySelector(".thought-process");
+        const contentContainer = containerDiv.querySelector(".message-content");
+
+        // Remove cursor initially
+        contentContainer.innerHTML = "";
+
+        const params = new URLSearchParams({
+          message: message,
+          thread_id: state.currentThreadId || "",
+        });
+
+        try {
+          const response = await fetch(
+            `${API_URL}/chat/stream?${params.toString()}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message,
+                thread_id: state.currentThreadId,
+              }),
+            }
+          );
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let contentParts = []; // collect AI message pieces in order
+          let seenNodes = new Set(); // Track which nodes we've already shown
+          let nodeThoughtMap = new Map(); // Map node names to their thought elements
+          let nodeLastText = new Map(); // avoid repeating identical snippets
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n");
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+
+                  // Helper: decide if a message object is an AI assistant message
+                  const isAIMessage = (msg) => {
+                    if (!msg) return false;
+                    if (typeof msg === "string") return true; // plain strings are treated as AI output
+                    if (msg.role && msg.role === "assistant") return true;
+                    if (
+                      msg.type &&
+                      (msg.type === "ai" || msg.type === "assistant")
+                    )
+                      return true;
+                    if (
+                      msg.author &&
+                      msg.author.role &&
+                      msg.author.role === "assistant"
+                    )
+                      return true;
+                    // If a message explicitly indicates a tool/source, treat as non-AI
+                    if (
+                      msg.tool ||
+                      msg.source === "tool" ||
+                      msg.type === "tool"
+                    )
+                      return false;
+                    // Fallback: if it has content but no explicit tool marker, assume AI
+                    return !!msg.content;
+                  };
+
+                  if (data.type === "chunk") {
+                    const event = data.event;
+
+                    // Process each node in the event
+                    Object.keys(event).forEach((nodeName) => {
+                      const nodeData = event[nodeName];
+
+                      if (nodeName === "messages") return;
+
+                      // Create a thought element for this node the first time we see it
+                      if (!seenNodes.has(nodeName)) {
+                        seenNodes.add(nodeName);
+                        const snippet =
+                          nodeData.preview ||
+                          nodeData.summary ||
+                          "processing...";
+                        const el = addThought(
+                          thoughtsContainer,
+                          nodeName,
+                          snippet,
+                          false
+                        );
+                        nodeThoughtMap.set(nodeName, el);
+                      }
+
+                      // Check for AI content in node messages and render them
+                      if (
+                        nodeData.messages &&
+                        Array.isArray(nodeData.messages)
+                      ) {
+                        nodeData.messages.forEach((msg) => {
+                          let newContent = "";
+                          if (typeof msg === "string") {
+                            newContent = msg;
+                          } else if (msg.content) {
+                            newContent = msg.content;
+                          } else if (msg.text) {
+                            newContent = msg.text;
+                          }
+
+                          if (newContent && isAIMessage(msg)) {
+                            // Avoid repeating identical snippets from the same node
+                            const last = nodeLastText.get(nodeName) || "";
+                            if (newContent !== last) {
+                              nodeLastText.set(nodeName, newContent);
+
+                              // Append incremental AI content to the visible assistant bubble
+                              contentParts.push(newContent);
+                              const combined = contentParts.join("\n\n");
+                              contentContainer.innerHTML =
+                                marked.parse(combined);
+                              scrollToBottom();
+
+                              // Mark thought as finished (replace spinner with check)
+                              const thoughtEl = nodeThoughtMap.get(nodeName);
+                              if (thoughtEl)
+                                finishThought(thoughtEl, newContent);
+                            }
+                          }
+                        });
+                      }
+                    });
+
+                    // Ensure thoughts container is visible while streaming
+                    thoughtsContainer.style.display = "block";
+                    if (containerDiv && containerDiv._thoughtToggle)
+                      containerDiv._thoughtToggle.textContent = "Hide thoughts";
+                  } else if (data.type === "complete") {
+                    if (data.thread_id) state.currentThreadId = data.thread_id;
+
+                    // Render the final AI response now (if any)
+                    const fullContent = contentParts.join("\n\n");
+                    if (fullContent) {
+                      contentContainer.innerHTML = marked.parse(fullContent);
+                      // Save final message to state
+                      saveMessageToState(fullContent, false);
+                      updateChatTitle(message);
+                    }
+
+                    // Mark final state: ensure thought items show finished state
+                    nodeThoughtMap.forEach((thoughtEl, nodeName) => {
+                      if (thoughtEl) finishThought(thoughtEl);
+                    });
+
+                    // Reset streaming buffers but keep thought elements for user inspection
+                    nodeLastText.clear();
+                    contentParts = [];
+                  }
+                } catch (e) {
+                  console.log("Stream parse error", e);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          throw error;
+        } finally {
+          state.isStreaming = false;
+        }
+      }
+
+      // --- UI Helper Functions ---
+
+      function createAssistantContainer() {
+        const wrapper = document.createElement("div");
+        wrapper.className = "message-wrapper assistant";
+
+        // 1. Thoughts Area (Transparent steps) - hidden by default as a dropdown
+        const thoughts = document.createElement("div");
+        thoughts.className = "thought-process";
+        thoughts.style.display = "none"; // Hidden until toggled or streaming
+
+        // Toggle control for the dropdown
+        const toggleWrapper = document.createElement("div");
+        toggleWrapper.style.display = "flex";
+        toggleWrapper.style.justifyContent = "flex-end";
+        toggleWrapper.style.marginBottom = "6px";
+
+        const toggleBtn = document.createElement("button");
+        toggleBtn.className = "thought-toggle";
+        toggleBtn.textContent = "Show thoughts";
+        toggleBtn.style.fontSize = "12px";
+        toggleBtn.style.padding = "6px 8px";
+        toggleBtn.style.border = "1px solid var(--border-color)";
+        toggleBtn.style.borderRadius = "6px";
+        toggleBtn.style.background = "white";
+        toggleBtn.style.cursor = "pointer";
+
+        toggleBtn.addEventListener("click", () => {
+          if (thoughts.style.display === "none") {
+            thoughts.style.display = "block";
+            toggleBtn.textContent = "Hide thoughts";
+          } else {
+            thoughts.style.display = "none";
+            toggleBtn.textContent = "Show thoughts";
+          }
+          scrollToBottom();
+        });
+
+        toggleWrapper.appendChild(toggleBtn);
+
+        // 2. Main Content Area
+        const content = document.createElement("div");
+        content.className = "message-content";
+        content.innerHTML = '<span class="cursor"></span>'; // Loading cursor
+
+        wrapper.appendChild(toggleWrapper);
+        wrapper.appendChild(thoughts);
+        wrapper.appendChild(content);
+
+        // expose toggle for streaming logic
+        wrapper._thoughtToggle = toggleBtn;
+        return wrapper;
+      }
+
+      function addThought(container, agent, text, isSuccess = false) {
+        const div = document.createElement("div");
+        div.className = `thought-item ${isSuccess ? "active" : ""}`;
+
+        // Friendly display name for the node
+        const displayName = translateNodeName(agent);
+
+        // Determine badge color
+        let badgeClass = "receptionist";
+        const lname = agent.toLowerCase();
+        if (lname.includes("clinical") || lname.includes("doctor"))
+          badgeClass = "clinical";
+        if (
+          lname.includes("tool") ||
+          lname.includes("search") ||
+          lname.includes("rag")
+        )
+          badgeClass = "tool";
+        if (
+          lname.includes("patient") ||
+          lname.includes("data") ||
+          lname.includes("lookup")
+        )
+          badgeClass = "tool";
+
+        const iconHtml = isSuccess
+          ? '<span class="thought-icon"><i class="fas fa-check-circle" style="color:var(--success)"></i></span>'
+          : '<span class="thought-icon"><i class="fas fa-cog fa-spin"></i></span>';
+
+        div.innerHTML = `
+          ${iconHtml}
+          <span class="agent-badge ${badgeClass}">${displayName}</span>
+          <span class="thought-text">${escapeHtml(text)}</span>
+        `;
+        container.appendChild(div);
+        scrollToBottom();
+        return div; // Return the element for tracking
+      }
+
+      // Map internal node names to friendlier labels
+      function translateNodeName(name) {
+        const map = {
+          receptionist: "Front Desk Triage",
+          patient_data_retrieval: "Patient Lookup",
+          clinical_agent: "Clinical Reasoning",
+          clinical_tools: "External Tools",
+          searcher: "Web Search",
+          rag: "Knowledge Base",
+          messages: "Assistant",
+        };
+        if (map[name]) return map[name];
+        // Fallback: prettify underscore names
+        return name
+          .replace(/_/g, " ")
+          .split(" ")
+          .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+          .join(" ");
+      }
+
+      // Mark a thought as finished: stop spinner and show check
+      function finishThought(el, finishedText) {
+        if (!el) return;
+        const icon = el.querySelector(".thought-icon");
+        if (icon) {
+          icon.innerHTML =
+            '<i class="fas fa-check-circle" style="color:var(--success)"></i>';
+        }
+        el.classList.add("active");
+        const txt = el.querySelector(".thought-text");
+        if (txt && finishedText) {
+          txt.innerHTML =
+            escapeHtml(finishedText) +
+            ' <strong style="color:var(--success)">— finished</strong>';
+        } else if (txt) {
+          // append finished marker if not already present
+          if (!txt.innerHTML.includes("finished")) {
+            txt.innerHTML =
+              txt.innerHTML +
+              ' <strong style="color:var(--success)">— finished</strong>';
+          }
+        }
+        scrollToBottom();
+      }
+
+      function appendMessageToUI(role, text) {
+        const empty = document.querySelector(".empty-state");
+        if (empty) empty.remove();
+
+        const wrapper = document.createElement("div");
+        wrapper.className = `message-wrapper ${role}`;
+
+        if (role === "user") {
+          wrapper.innerHTML = `
+            <div class="message-content">${escapeHtml(text)}</div>
+          `;
+        } else {
+          // Re-use logic for loading history
+          wrapper.innerHTML = `
+            <div class="message-content">${marked.parse(text)}</div>
+          `;
+        }
+
+        elements.container.appendChild(wrapper);
+        scrollToBottom();
+      }
+
+      function createNewChat() {
+        const newId = Date.now().toString();
+        const chat = {
+          id: newId,
+          name: "New Consultation",
+          messages: [],
+          timestamp: new Date().toISOString(),
+        };
+        state.chats.unshift(chat);
+        state.currentChatId = newId;
+        state.currentThreadId = null;
+
+        localStorage.setItem("mediflow_chats", JSON.stringify(state.chats));
+
+        elements.container.innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-user-md"></i>
+            <h3>Clinical Decision Support Agent</h3>
+            <p>Ready to assist with triage, differential diagnosis, and patient intake.</p>
+          </div>
+        `;
+        elements.title.textContent = chat.name;
+        renderHistory();
+      }
+
+      function loadChat(id) {
+        const chat = state.chats.find((c) => c.id === id);
+        if (!chat) return;
+
+        state.currentChatId = id;
+        state.currentThreadId = null; // Ideally this should be persisted too
+        elements.title.textContent = chat.name;
+
+        elements.container.innerHTML = "";
+
+        if (chat.messages.length === 0) {
+          elements.container.innerHTML = `
+              <div class="empty-state">
+                <i class="fas fa-user-md"></i>
+                <h3>Clinical Decision Support Agent</h3>
+              </div>`;
+        } else {
+          // Render both user and assistant messages (show human + AI only)
+          chat.messages.forEach((msg) => {
+            if (msg.isUser) {
+              appendMessageToUI("user", msg.content);
+            } else {
+              appendMessageToUI("assistant", msg.content);
+            }
+          });
+        }
+
+        renderHistory();
+      }
+
+      function renderHistory() {
+        elements.history.innerHTML = state.chats
+          .map(
+            (chat) => `
+          <div class="chat-item ${
+            chat.id === state.currentChatId ? "active" : ""
+          }" 
+               onclick="loadChat('${chat.id}')">
+            <div class="chat-name">${escapeHtml(chat.name)}</div>
+            <div class="chat-meta">${new Date(
+              parseInt(chat.id)
+            ).toLocaleDateString()}</div>
+          </div>
+        `
+          )
+          .join("");
+      }
+
+      function updateChatTitle(firstMessage) {
+        const chat = state.chats.find((c) => c.id === state.currentChatId);
+        if (chat && chat.name === "New Consultation") {
+          // Simple heuristic to extract patient name or symptom
+          let name = firstMessage.slice(0, 30);
+          if (name.length < firstMessage.length) name += "...";
+
+          chat.name = name;
+          elements.title.textContent = name;
+          localStorage.setItem("mediflow_chats", JSON.stringify(state.chats));
+          renderHistory();
+        }
+      }
+
+      function saveMessageToState(content, isUser) {
+        const chat = state.chats.find((c) => c.id === state.currentChatId);
+        if (chat) {
+          chat.messages.push({
+            content,
+            isUser,
+            timestamp: new Date().toISOString(),
+          });
+          localStorage.setItem("mediflow_chats", JSON.stringify(state.chats));
+        }
+      }
+
+      function scrollToBottom() {
+        elements.container.scrollTop = elements.container.scrollHeight;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Initialize the application when DOM is ready
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
+    </script>
+  </body>
+</html>

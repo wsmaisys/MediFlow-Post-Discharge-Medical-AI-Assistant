@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MediFlow API Documentation</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #0066cc;
+        --bg: #f8fafc;
+        --card: #fff;
+        --muted: #64748b;
+      }
+      body {
+        font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: #1e293b;
+        margin: 0;
+        padding: 24px;
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0;
+      }
+      p.lead {
+        color: var(--muted);
+        margin: 6px 0 18px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid #e6eef8;
+        border-radius: 8px;
+        padding: 18px;
+        margin-bottom: 16px;
+      }
+      pre {
+        background: #0f1724;
+        color: #e6eef8;
+        padding: 12px;
+        border-radius: 6px;
+        overflow: auto;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      /* Inline code boxes (light background, dark text) */
+      code {
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #0f1724;
+      }
+      /* Ensure code inside <pre> inherits the pre color and is readable */
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        border-radius: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+      th,
+      td {
+        padding: 8px;
+        border-bottom: 1px solid #eef3f8;
+        text-align: left;
+      }
+      th {
+        background: #fafcff;
+      }
+      .endpoint {
+        font-family: monospace;
+        background: #f3f8ff;
+        padding: 6px;
+        border-left: 4px solid var(--primary);
+        display: inline-block;
+        border-radius: 4px;
+      }
+      .contact {
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="logo">
+          <i class="fas fa-heart-pulse" style="color: var(--primary)"></i>
+        </div>
+        <div>
+          <h1>MediFlow — API Documentation</h1>
+          <div class="lead">
+            Quick reference for integrating with the Clinical Agent API.
+          </div>
+        </div>
+        <nav style="display: flex; gap: 10px; align-items: center">
+          <a
+            class="back-link"
+            href="/"
+            style="
+              text-decoration: none;
+              padding: 8px 10px;
+              border: 1px solid #e6eef8;
+              border-radius: 8px;
+              color: var(--primary);
+              background: #fff;
+            "
+            ><i class="fas fa-home"></i> Home</a
+          >
+          <a
+            class="back-link"
+            href="/api/patients"
+            style="
+              text-decoration: none;
+              padding: 8px 10px;
+              border: 1px solid #e6eef8;
+              border-radius: 8px;
+              color: var(--primary);
+              background: #fff;
+            "
+            ><i class="fas fa-users"></i> Patients (API)</a
+          >
+        </nav>
+      </header>
+
+      <div class="card">
+        <strong>Base URL</strong>
+        <div class="small" style="margin-top: 6px">
+          When running locally the app defaults to:
+          <code>http://localhost:5000</code>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Available endpoints</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Method</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <span class="endpoint">/</span> or
+                <span class="endpoint">/index.html</span>
+              </td>
+              <td>GET</td>
+              <td>Serves the main chat UI (HTML).</td>
+            </tr>
+            <!-- /patients (HTML) removed from docs: use /api/patients for production-grade API access -->
+            <tr>
+              <td><span class="endpoint">/data/patients.json</span></td>
+              <td>GET</td>
+              <td>Returns bundled dummy patient data (JSON).</td>
+            </tr>
+            <tr>
+              <td><span class="endpoint">/api/patients</span></td>
+              <td>GET</td>
+              <td>API-style endpoint returning the same patient JSON.</td>
+            </tr>
+            <tr>
+              <td><span class="endpoint">/api/health</span></td>
+              <td>GET</td>
+              <td>Health check; returns a small JSON status object.</td>
+            </tr>
+            <tr>
+              <td><span class="endpoint">/api/chat</span></td>
+              <td>POST</td>
+              <td>Send a chat message to the clinical agent (returns JSON).</td>
+            </tr>
+            <tr>
+              <td><span class="endpoint">/api/chat/stream</span></td>
+              <td>POST</td>
+              <td>
+                Streamed responses (SSE-like) from the agent. Clients should
+                parse Server-Sent Events prefixed by <code>data: </code> and
+                handle <code>{"type":"chunk"}</code> and final
+                <code>{"type":"complete"}</code> events.
+              </td>
+            </tr>
+            <tr>
+              <td><span class="endpoint">/api/threads</span></td>
+              <td>GET</td>
+              <td>Returns available conversation threads (list).</td>
+            </tr>
+            <tr>
+              <td><span class="endpoint">/api/documentation</span></td>
+              <td>GET</td>
+              <td>Serves this API documentation HTML page.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Examples</h3>
+
+        <h4>/api/health</h4>
+        <pre><code>curl http://localhost:5000/api/health</code></pre>
+        <p class="small">
+          Response:
+          <code
+            >{ "status": "ok", "message": "Clinical Agent API is running"
+            }</code
+          >
+        </p>
+
+        <h4>Get patients (JSON)</h4>
+        <pre><code>curl http://localhost:5000/data/patients.json
+
+# or API-style
+curl http://localhost:5000/api/patients</code></pre>
+
+        <h4>Send chat message (simple request)</h4>
+        <p>
+          POST JSON body:
+          <code
+            >{ "message": "Patient has chest pain", "thread_id": null }</code
+          >
+        </p>
+        <pre><code>curl -X POST http://localhost:5000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Patient has chest pain"}'
+
+# Python (requests)
+import requests
+r = requests.post("http://localhost:5000/api/chat", json={"message":"Patient has chest pain"})
+print(r.json())</code></pre>
+
+        <h4>Streamed assistant response</h4>
+        <p>
+          The app exposes a streaming endpoint at <code>/api/chat/stream</code>.
+          The server sends incremental data chunks encoded as newline-delimited
+          JSON prefixed with <code>data: </code>. The client in the UI reads
+          <code>response.body.getReader()</code> and decodes pieces.
+        </p>
+
+        <pre><code>// Minimal browser example using fetch and a reader
+async function streamChat(message){
+  const res = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message })
+  });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = '';
+  while(true){
+    const { done, value } = await reader.read();
+    if(done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    // server sends lines like: data: { ... }\n\n
+    // parse and handle chunk (UI may show incremental content)
+    // see the project's front-end code for a more complete example
+  }
+}
+</code></pre>
+
+        <h4>Notes about streaming</h4>
+        <ul>
+          <li>
+            The server emits objects with a <code>type</code> field like
+            <code>"chunk"</code> and a final <code>"complete"</code> event.
+          </li>
+          <li>
+            The front-end collects AI message pieces and renders them as
+            Markdown (see the UI's JavaScript for full behavior).
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Integration tips</h3>
+        <ul>
+          <li>
+            Serve the app locally with
+            <code>uvicorn app:app --host 0.0.0.0 --port 5000</code>.
+          </li>
+          <li>
+            If you embed the UI into another app, ensure same-origin or
+            configure CORS in the FastAPI app.
+          </li>
+          <li>
+            Use the streaming endpoint for long responses or real-time agent
+            reasoning; use plain <code>/api/chat</code> for synchronous replies.
+          </li>
+        </ul>
+      </div>
+
+      <div class="card contact">
+        <h3>Support</h3>
+        <p>
+          If you need further help integrating the API, email:
+          <a href="mailto:wsmaisys@gmail.com">wsmaisys@gmail.com</a>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
