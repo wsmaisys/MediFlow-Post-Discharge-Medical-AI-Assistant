@@ -1,364 +1,491 @@
 # Testing Recommendations Report
 
-**Generated:** 2025-11-29 18:11:44  
+**Generated:** 2025-11-29 21:06:05  
 **Testing LLM:** mistral-small-latest
 
 ---
 
 ## Test Execution Summary
 
-- TEST_001: PASS (Quality: 3.00, Issues: 3)
-- TEST_002: PASS (Quality: 3.67, Issues: 1)
-- TEST_003: FAIL (Quality: 1.00, Issues: 7)
-- TEST_004: FAIL (Quality: 1.00, Issues: 13)
-- TEST_005: PARTIAL (Quality: 2.33, Issues: 7)
-- TEST_006: FAIL (Quality: 1.00, Issues: 10)
-- TEST_007: FAIL (Quality: 1.00, Issues: 9)
+- TEST_001: PASS (Quality: 4.00, Issues: 0)
+- TEST_002: PASS (Quality: 4.00, Issues: 0)
+- TEST_003: PASS (Quality: 4.00, Issues: 0)
+- TEST_004: PARTIAL (Quality: 2.50, Issues: 4)
+- TEST_005: PASS (Quality: 4.00, Issues: 0)
+- TEST_006: PASS (Quality: 4.00, Issues: 0)
+- TEST_007: PARTIAL (Quality: 2.75, Issues: 4)
 
 ---
 
 ## Issues Identified
 
-- Did not address the user's question about swelling
-- Did not maintain patient context
-- Repeats greeting and request for name multiple times
-- Did not use the expected tool (patient_data_retrieval)
-- failed to retrieve patient data
-- Response does not directly address the invalid input ('Unknown')
-- Did not maintain context from previous interaction
-- Asked for unnecessary personal information
-- Did not retrieve patient data
-- Could acknowledge the invalid input more explicitly
-- Incorrectly referenced patient-specific data (Stage 3 CKD) without context
-- Did not attempt to use any tools
-- Does not provide the requested medication information
-- did not handle missing data gracefully
-- repetitive and unhelpful greeting
-- Failed to identify patient and retrieve data
-- Fails to answer the question about kidney function
-- Inconsistent response structure (greeting after question)
-- Did not maintain context from previous conversation
-- Did not greet the patient
-- Does not stream responses in chunks
-- Failed to use nephrology docs for medical query
-- Did not follow expected routing behavior
-- Did not use the correct tool for the medical query
-- No response content delivered
-- Response does not directly address the philosophical question
-- Error message is generic and not specific to the input
-- Incorrectly claims lack of tools after repetitive behavior
-- Inconsistent response structure (asked for name after greeting)
-- incorrect tool usage
-- No tools were detected or used
-- Fails to use the patient_data_retrieval tool
-- Failed to provide requested medication schedule
-- did not use the correct tool
-- Asks for user's name despite nonsensical input
-- Failed to use search_web tool for general query
-- repetitive and unhelpful responses
-- Did not route to nephrology docs for medical query
-- Does not handle missing data gracefully
-- Did not use any tools to retrieve patient data or relevant information
-- Request for user's name is irrelevant to the question asked
-- Loses context during interaction
-- Did not provide relevant information despite having tools
-- Did not maintain context of the multi-turn conversation
-- Response does not acknowledge nonsensical input directly
-- Did not use available tools to retrieve patient data
-- Connection error occurred during response
-- Did not use expected tools
-- No response content provided
-- Repeats the same request for name twice
+- Did not answer the question
+- Did not handle malformed input gracefully
+- Did not handle duplicate request gracefully (responded twice to the same input)
+- No specific mention of security or patient data handling in the response
+- Failed to maintain context
+- Did not reject inappropriate requests
+- Did not use available tools
+- Did not acknowledge user introduction
 
 ---
 
 ## Detailed Recommendations
 
-# Comprehensive Recommendations for Clinical Agent Chat System
+# Comprehensive Recommendations for Clinical Agent Chatbot System
 
 ## 1. CRITICAL ISSUES
 
-### **1.1 Immediate Bug Fixes**
-- **Issue**: Repeated greeting and name requests (observed in TEST_003, TEST_004, TEST_007)
-  - **Why**: Breaks conversation flow, frustrates users, and wastes system resources
-  - **How**: Modify `agents_nodes.py` (Receptionist Agent) to:
-    - Track if patient identification was already attempted
-    - Only request name if no patient context exists
-    - Implement a max retry limit (e.g., 2 attempts)
+### 1.1 Security Concerns
+**Issue**: Lack of explicit security measures for patient data handling
+**Impact**: Potential HIPAA violations and data breaches
+**Recommendation**:
+- Implement proper authentication for patient identification (patients.json)
+- Add data encryption for patient records in transit and at rest
+- Implement role-based access control for patient data retrieval
+- Add audit logging for all patient data access
+**Implementation**:
+```python
+# In tools.py - patient_data_retrieval tool
+def patient_data_retrieval(patient_id: str, session_token: str) -> dict:
+    """Retrieve patient data with authentication"""
+    if not validate_session_token(session_token):
+        raise PermissionError("Unauthorized access attempt")
+    # Existing implementation
+```
 
-- **Issue**: Incorrect patient data references (TEST_004, TEST_006)
-  - **Why**: Violates HIPAA compliance and erodes user trust
-  - **How**: Enhance `patient_data_retrieval` tool in `tools.py` to:
-    - Validate patient ID before retrieval
-    - Return "No patient data available" if no match
-    - Add logging for all data access attempts
+### 1.2 Data Integrity
+**Issue**: No validation for malformed inputs in `/api/chat` endpoint
+**Impact**: Potential system crashes or incorrect responses
+**Recommendation**:
+- Add input validation middleware in FastAPI
+- Implement schema validation for all API requests
+**Implementation**:
+```python
+# In app.py
+from pydantic import BaseModel
 
-- **Issue**: Tool invocation failures (TEST_003, TEST_006, TEST_007)
-  - **Why**: Prevents core functionality from working
-  - **How**: Update `routing.py` to:
-    - Add fallback mechanisms when primary tools fail
-    - Implement retry logic with exponential backoff
-    - Log all tool invocation attempts and failures
+class ChatRequest(BaseModel):
+    messages: list[dict] = Field(..., min_items=1)
 
-### **1.2 Security Concerns**
-- **Issue**: No input sanitization for patient names
-  - **Why**: Risk of injection attacks or data leaks
-  - **How**: Add validation in `agents_nodes.py` (Receptionist Agent):
-    ```python
-    def sanitize_input(input_text):
-        return re.sub(r'[^a-zA-Z\s\-]', '', input_text).strip()
-    ```
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    # Existing implementation
+```
 
-- **Issue**: No rate limiting on API endpoints
-  - **Why**: Vulnerable to brute force attacks
-  - **How**: Add FastAPI rate limiting to `app.py`:
-  ```python
-  from fastapi import Request
-  from fastapi.middleware import Middleware
-  from slowapi import Limiter
-  from slowapi.util import get_remote_address
-
-  limiter = Limiter(key_func=get_remote_address)
-  app.add_middleware(LimiterMiddleware, limiter=limiter)
-  ```
+### 1.3 Context Maintenance
+**Issue**: Test results show context was not maintained properly
+**Impact**: Poor user experience and incorrect responses
+**Recommendation**:
+- Implement context persistence in `ChatState`
+- Add context validation in agent transitions
+**Implementation**:
+```python
+# In state_and_graph.py
+def validate_context_transition(current_state: ChatState, next_node: str) -> bool:
+    """Ensure context is valid for transition"""
+    if next_node == "clinical_agent" and not current_state.patient_info:
+        return False
+    return True
+```
 
 ## 2. ARCHITECTURE IMPROVEMENTS
 
-### **2.1 Code Structure**
-- **Issue**: Mixed sync/async code in `utils_async.py`
-  - **Why**: Creates maintenance complexity
-  - **How**: Standardize on async throughout the codebase:
-    - Convert all synchronous functions to async
-    - Remove the async/sync bridge utilities
-    - Update all tool interfaces to async signatures
+### 2.1 Code Organization
+**Issue**: Mixed concerns in `agents_nodes.py` and `tools.py`
+**Recommendation**:
+- Separate agent logic from tool implementations
+- Create dedicated modules for each agent type
+**Implementation**:
+```
+agents/
+    __init__.py
+    receptionist_agent.py
+    clinical_agent.py
+    data_retrieval_agent.py
+tools/
+    __init__.py
+    web_search_tool.py
+    doc_query_tool.py
+    patient_data_tool.py
+```
 
-- **Issue**: State management scattered across files
-  - **Why**: Makes debugging difficult
-  - **How**: Consolidate in `state_and_graph.py`:
-    - Create a `ConversationState` class with clear methods
-    - Implement proper serialization/deserialization
-    - Add validation for state transitions
+### 2.2 Design Patterns
+**Issue**: Direct tool calls from agents may lead to tight coupling
+**Recommendation**:
+- Implement Strategy Pattern for tool selection
+- Create a ToolManager class to handle tool orchestration
+**Implementation**:
+```python
+# In tools.py
+class ToolManager:
+    def __init__(self):
+        self.tools = {
+            "web_search": WebSearchTool(),
+            "doc_query": DocQueryTool(),
+            "patient_data": PatientDataTool()
+        }
 
-### **2.2 Design Patterns**
-- **Recommendation**: Implement Strategy Pattern for tool selection
-  - **Why**: Current routing logic is hard to extend
-  - **How**: Refactor `routing.py` to:
-    ```python
-    class ToolSelector(Strategy):
-        def select_tool(self, query: str, context: dict) -> Tool:
-            # Implementation based on keywords and context
-    ```
+    def select_tool(self, query: str) -> BaseTool:
+        """Select appropriate tool based on query content"""
+        # Implementation using keyword matching
+```
 
-- **Recommendation**: Use Command Pattern for tool execution
-  - **Why**: Decouples tool invocation from agents
-  - **How**: Create `ToolCommand` interface in `tools.py`:
-    ```python
-    class ToolCommand:
-        def execute(self, params: dict) -> dict:
-            pass
-    ```
+### 2.3 Scalability
+**Issue**: Potential bottlenecks in tool calls
+**Recommendation**:
+- Implement async tool execution
+- Add rate limiting for external API calls
+**Implementation**:
+```python
+# In tools.py
+async def async_query_nephrology_docs(query: str) -> str:
+    """Async version of doc query tool"""
+    async with aiohttp.ClientSession() as session:
+        # Implementation
+```
 
 ## 3. TOOL & AGENT IMPROVEMENTS
 
-### **3.1 Tool Accuracy**
-- **Issue**: Tools not invoked when appropriate (TEST_003, TEST_006)
-  - **Why**: Misses key functionality
-  - **How**: Enhance `routing.py` to:
-    - Add confidence scoring for tool selection
-    - Implement fallback chains (e.g., if RAG fails → web search)
-    - Add tool usage analytics
+### 3.1 Tool Selection Accuracy
+**Issue**: Tools may be called inappropriately
+**Recommendation**:
+- Implement fuzzy matching for tool selection
+- Add confidence scoring for tool selection
+**Implementation**:
+```python
+# In routing.py
+def select_tool(query: str) -> tuple[str, float]:
+    """Select tool with confidence score"""
+    scores = {
+        "web_search": calculate_similarity(query, WEB_SEARCH_KEYWORDS),
+        "doc_query": calculate_similarity(query, DOC_QUERY_KEYWORDS),
+        "patient_data": calculate_similarity(query, PATIENT_DATA_KEYWORDS)
+    }
+    best_tool = max(scores.items(), key=itemgetter(1))
+    return best_tool
+```
 
-### **3.2 Agent Routing**
-- **Issue**: Inconsistent routing between agents (TEST_005, TEST_007)
-  - **Why**: Creates confusing user experience
-  - **How**: Improve `routing.py`:
-    - Add state transition validation
-    - Implement routing history tracking
-    - Add timeout for agent responses
+### 3.2 Agent Routing Optimization
+**Issue**: Routing logic may be too simplistic
+**Recommendation**:
+- Implement state-based routing decisions
+- Add fallback routing for ambiguous cases
+**Implementation**:
+```python
+# In routing.py
+def determine_next_node(state: ChatState) -> str:
+    """Determine next node based on state and message"""
+    if not state.patient_info and "my" in state.messages[-1].content.lower():
+        return "receptionist_agent"
+    # Other routing logic
+```
 
-### **3.3 Context Handling**
-- **Issue**: Lost context in multi-turn conversations (TEST_004, TEST_007)
-  - **Why**: Critical for clinical applications
-  - **How**: Enhance `state_and_graph.py`:
-    - Add context summarization
-    - Implement context decay mechanism
-    - Add context validation checks
+### 3.3 Context Handling
+**Issue**: Context may be lost during transitions
+**Recommendation**:
+- Implement context summarization
+- Add context persistence across sessions
+**Implementation**:
+```python
+# In state_and_graph.py
+def summarize_context(state: ChatState) -> str:
+    """Generate context summary for new sessions"""
+    return f"Patient {state.patient_info.get('name')} with {state.patient_info.get('diagnosis')}"
+```
 
 ## 4. ERROR HANDLING
 
-### **4.1 Missing Error Cases**
-- **Issue**: No handling of nonsensical input (TEST_004, TEST_007)
-  - **Why**: Creates poor user experience
-  - **How**: Add to `agents_nodes.py`:
-    ```python
-    def handle_nonsense(input_text):
-        return "I'm having trouble understanding. Could you rephrase?"
-    ```
+### 4.1 Missing Error Cases
+**Issue**: No handling for duplicate requests
+**Recommendation**:
+- Implement request deduplication
+- Add proper error responses
+**Implementation**:
+```python
+# In app.py
+from fastapi import HTTPException
 
-- **Issue**: No tool failure recovery (TEST_006)
-  - **Why**: Leaves users without answers
-  - **How**: Add to `tools.py`:
-    ```python
-    class ToolWithFallback:
-        def execute(self, params):
-            try:
-                return self._execute(params)
-            except Exception as e:
-                return self._fallback(params)
-    ```
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    if is_duplicate_request(request):
+        raise HTTPException(status_code=409, detail="Duplicate request detected")
+    # Existing implementation
+```
 
-### **4.2 Graceful Degradation**
-- **Recommendation**: Implement progressive enhancement
-  - **Why**: Ensures basic functionality always works
-  - **How**: Modify `app.py` to:
-    - Serve static responses if LLM fails
-    - Provide tool results even if agent routing fails
-    - Maintain basic conversation flow during outages
+### 4.2 Graceful Degradation
+**Issue**: No fallback when tools fail
+**Recommendation**:
+- Implement retry logic with exponential backoff
+- Add fallback responses when tools fail
+**Implementation**:
+```python
+# In tools.py
+async def query_nephrology_docs(query: str, retries=3) -> str:
+    """Query docs with retry logic"""
+    for attempt in range(retries):
+        try:
+            return await _query_nephrology_docs(query)
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            await asyncio.sleep(2 ** attempt)
+```
+
+### 4.3 User Experience
+**Issue**: No helpful error messages
+**Recommendation**:
+- Implement user-friendly error messages
+- Add error codes for client-side handling
+**Implementation**:
+```python
+# In app.py
+@app.exception_handler(ToolError)
+async def tool_error_handler(request, exc):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "tool_failure",
+            "message": "We're having trouble accessing that information. Please try again later.",
+            "details": str(exc)
+        }
+    )
+```
 
 ## 5. TESTING IMPROVEMENTS
 
-### **5.1 Test Coverage Gaps**
-- **Missing Tests**:
-  - Concurrent user sessions
-  - Long conversation sessions (20+ turns)
-  - Edge case patient names (special characters, numbers)
-  - Tool API failures (rate limits, timeouts)
+### 5.1 Test Coverage Gaps
+**Issue**: Missing security and data handling tests
+**Recommendation**:
+- Add security test cases
+- Implement data handling test scenarios
+**Implementation**:
+```python
+# In tests/test_security.py
+def test_patient_data_access():
+    """Test unauthorized patient data access"""
+    response = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "What's my diagnosis?"}]
+    })
+    assert response.status_code == 403
+```
 
-- **Recommendation**: Add test cases for:
-  - `test_tool_failure_handling.py`
-  - `test_concurrent_sessions.py`
-  - `test_long_conversations.py`
+### 5.2 Additional Test Scenarios
+**Issue**: Missing edge cases
+**Recommendation**:
+- Add tests for rapid-fire questions
+- Test concurrent requests
+- Test malformed inputs
+**Implementation**:
+```python
+# In tests/test_edge_cases.py
+def test_concurrent_requests():
+    """Test concurrent requests from same patient"""
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(send_chat_request, i) for i in range(10)]
+        for future in futures:
+            assert future.result().status_code == 200
+```
 
-### **5.2 Edge Cases**
-- **Add Tests For**:
-  - Patient names with special characters
-  - Medical questions with no clear answer
-  - Rapid-fire user messages
-  - Partial patient data in records
+### 5.3 Edge Cases
+**Issue**: No tests for tool failures
+**Recommendation**:
+- Implement mock tool failures
+- Test error propagation
+**Implementation**:
+```python
+# In tests/test_tools.py
+def test_tool_failure_handling(mocker):
+    """Test handling of tool failures"""
+    mocker.patch("tools.query_nephrology_docs", side_effect=Exception("Mock failure"))
+    response = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "What is CKD?"}]
+    })
+    assert response.status_code == 400
+    assert "tool_failure" in response.json()["error"]
+```
 
 ## 6. PERFORMANCE OPTIMIZATION
 
-### **6.1 Response Time**
-- **Issue**: Streaming not implemented (TEST_007)
-  - **Why**: Poor user experience for long responses
-  - **How**: Implement in `app.py`:
-    ```python
-    @app.post("/api/chat")
-    async def chat_endpoint(request: ChatRequest):
-        async for chunk in stream_response(request):
-            yield chunk
-    ```
+### 6.1 Response Time
+**Issue**: Potential delays in tool calls
+**Recommendation**:
+- Implement caching for frequent queries
+- Add parallel tool execution where possible
+**Implementation**:
+```python
+# In tools.py
+from functools import lru_cache
 
-- **Recommendation**: Add response caching
-  - **Why**: Reduces LLM and tool usage
-  - **How**: Implement in `tools.py`:
-    ```python
-    @lru_cache(maxsize=1000)
-    def cached_tool_execution(params):
-        return actual_tool_execution(params)
-    ```
+@lru_cache(maxsize=100)
+def cached_query_nephrology_docs(query: str) -> str:
+    """Cached version of doc query tool"""
+    return query_nephrology_docs(query)
+```
 
-### **6.2 Resource Usage**
-- **Recommendation**: Implement connection pooling
-  - **Why**: Reduces database load
-  - **How**: Add to `patient_data_retrieval` tool:
-    ```python
-    from sqlalchemy.pool import QueuePool
+### 6.2 Resource Usage
+**Issue**: Memory usage may grow with conversation length
+**Recommendation**:
+- Implement conversation summarization
+- Add memory limits for state
+**Implementation**:
+```python
+# In state_and_graph.py
+class ChatState:
+    def __init__(self, max_messages=50):
+        self.max_messages = max_messages
+        self.messages = []
 
-    engine = create_engine(..., poolclass=QueuePool, pool_size=5)
-    ```
+    def add_message(self, message):
+        """Add message with length control"""
+        if len(self.messages) >= self.max_messages:
+            self.messages.pop(0)
+        self.messages.append(message)
+```
+
+### 6.3 Caching Opportunities
+**Issue**: Repeated patient data queries
+**Recommendation**:
+- Implement patient data caching
+- Add TTL for cached data
+**Implementation**:
+```python
+# In tools.py
+from datetime import datetime, timedelta
+
+PATIENT_CACHE = {}
+PATIENT_CACHE_TTL = timedelta(hours=1)
+
+def get_patient_data(patient_id: str) -> dict:
+    """Get patient data with caching"""
+    if patient_id in PATIENT_CACHE:
+        if datetime.now() - PATIENT_CACHE[patient_id]["timestamp"] < PATIENT_CACHE_TTL:
+            return PATIENT_CACHE[patient_id]["data"]
+
+    data = _retrieve_patient_data(patient_id)
+    PATIENT_CACHE[patient_id] = {
+        "data": data,
+        "timestamp": datetime.now()
+    }
+    return data
+```
 
 ## 7. USER EXPERIENCE
 
-### **7.1 Conversation Flow**
-- **Issue**: Repetitive greetings (TEST_003, TEST_004)
-  - **Why**: Frustrates users
-  - **How**: Add to `agents_nodes.py`:
-    ```python
-    def should_greet(state):
-        return not state.get('greeting_shown', False)
-    ```
+### 7.1 Conversation Flow
+**Issue**: No acknowledgment of user introduction
+**Recommendation**:
+- Implement proper greeting responses
+- Add context acknowledgment
+**Implementation**:
+```python
+# In agents_nodes.py
+class ReceptionistAgent:
+    def handle_introduction(self, state: ChatState) -> str:
+        """Handle patient introduction"""
+        name = extract_name(state.messages[-1].content)
+        if name:
+            state.patient_info["name"] = name
+            return f"Hello {name}! I'm your clinical assistant. How can I help you today?"
+        return "Hello! Could you please tell me your name?"
+```
 
-- **Recommendation**: Add conversation summaries
-  - **Why**: Helps users track context
-  - **How**: Implement in `state_and_graph.py`:
-    ```python
-    def generate_summary(messages):
-        return summarize_with_llm(messages[-5:])
-    ```
+### 7.2 Response Clarity
+**Issue**: Responses may be too technical
+**Recommendation**:
+- Implement response simplification
+- Add layman's terms option
+**Implementation**:
+```python
+# In agents_nodes.py
+class ClinicalAgent:
+    def simplify_response(self, response: str) -> str:
+        """Simplify medical terminology"""
+        for term, simple in MEDICAL_TERMS.items():
+            response = response.replace(term, simple)
+        return response
+```
 
-### **7.2 Error Messages**
-- **Issue**: Generic error messages (TEST_004, TEST_006)
-  - **Why**: Doesn't help users recover
-  - **How**: Add to `utilities.py`:
-    ```python
-    def create_helpful_error(message, context):
-        return f"Error: {message}. You can try: {get_suggestions(context)}"
-    ```
+### 7.3 Helpful Error Messages
+**Issue**: Generic error messages
+**Recommendation**:
+- Implement specific error messages
+- Add recovery suggestions
+**Implementation**:
+```python
+# In app.py
+@app.exception_handler(PatientNotFound)
+async def patient_not_found_handler(request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "patient_not_found",
+            "message": "I couldn't find your patient record. Please verify your name and try again.",
+            "suggestion": "Make sure you've introduced yourself properly."
+        }
+    )
+```
 
 ## 8. CODE QUALITY
 
-### **8.1 Documentation**
-- **Recommendation**: Add module-level docs
-  - **Why**: Improves maintainability
-  - **How**: Add to each file:
-    ```python
+### 8.1 Code Organization
+**Issue**: Mixed concerns in utility files
+**Recommendation**:
+- Separate CLI utilities from general utilities
+- Create dedicated modules for async utilities
+**Implementation**:
+```
+utilities/
+    __init__.py
+    cli.py
+    general.py
+utils_async/
+    __init__.py
+    async_bridge.py
+```
+
+### 8.2 Documentation
+**Issue**: Incomplete docstrings
+**Recommendation**:
+- Implement comprehensive docstrings
+- Add module-level documentation
+**Implementation**:
+```python
+# In tools.py
+def query_nephrology_docs(query: str) -> str:
     """
-    Module: agents_nodes.py
-    Purpose: Defines the agent nodes for the clinical chatbot
-    Components:
-        - ReceptionistAgent: Handles initial patient identification
-        - ClinicalAgent: Provides medical information
-        - PatientDataRetrieval: Fetches patient records
+    Query the nephrology-specific knowledge base using RAG server.
+
+    Args:
+        query: The medical question to search for
+
+    Returns:
+        The answer from the knowledge base
+
+    Raises:
+        ToolError: If the query fails
+        TimeoutError: If the request times out
     """
-    ```
+    # Implementation
+```
 
-### **8.2 Code Organization**
-- **Issue**: Utility functions scattered
-  - **Why**: Hard to maintain
-  - **How**: Consolidate in `utilities.py`:
-    - Group related functions
-    - Add clear function categories
-    - Add type hints
+### 8.3 Maintainability
+**Issue**: Hardcoded values
+**Recommendation**:
+- Move configuration to config files
+- Implement environment variables
+**Implementation**:
+```python
+# In config.py
+class Config:
+    TOOL_TIMEOUT = 10  # seconds
+    MAX_CONVERSATION_LENGTH = 50
+    PATIENT_CACHE_TTL = 3600  # seconds
 
-### **8.3 Maintainability**
-- **Recommendation**: Add logging framework
-  - **Why**: Critical for debugging
-  - **How**: Implement in `app.py`:
-    ```python
-    import logging
-    from pythonjsonlogger import jsonlogger
+# In tools.py
+from config import Config
 
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    ```
-
-## Implementation Roadmap
-
-1. **Immediate Fixes (1-2 weeks)**:
-   - Security patches
-   - Critical bug fixes
-   - Basic error handling
-
-2. **Architecture Improvements (3-4 weeks)**:
-   - State management refactor
-   - Tool pattern implementation
-   - Async standardization
-
-3. **Enhancements (4-6 weeks)**:
-   - Context improvements
-   - Performance optimizations
-   - UX refinements
-
-4. **Testing & QA (2-3 weeks)**:
-   - New test cases
-   - Edge case coverage
-   - Load testing
-
-This comprehensive plan addresses all identified issues while improving the system's reliability, security, and user experience. The recommendations are prioritized based on impact and feasibility, with clear implementation paths for each suggested change.
+def query_nephrology_docs(query
 
 ---
 

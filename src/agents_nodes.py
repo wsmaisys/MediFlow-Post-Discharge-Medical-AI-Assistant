@@ -20,6 +20,185 @@ from llm_models import receptionist_llm, clinical_llm
 from tools import patient_data_tool, clinical_agent_tools
 
 
+# ============================================================================
+# TOOL SELECTION SCORING SYSTEM (LangGraph v1.0 Best Practice)
+# ============================================================================
+# Following LangGraph documentation on tool selection and routing logic,
+# this system implements intelligent tool routing based on query intent analysis.
+
+def _score_tool_appropriateness(query: str) -> dict[str, float]:
+    """
+    Score the appropriateness of each tool for the given query.
+    
+    Based on LangGraph v1.0 best practices for tool routing and decision-making,
+    this function analyzes query keywords, patterns, and intent to score each tool.
+    
+    Returns:
+        Dict with tool names as keys and scores (0-1) as values.
+        Higher scores indicate better fit for the query.
+    """
+    query_lower = query.lower()
+    
+    # Initialize scores for all tools
+    scores = {
+        'get_patient_discharge_report': 0.0,
+        'query_nephrology_docs': 0.0,
+        'search_web': 0.0
+    }
+    
+    # ====================================================================
+    # PATIENT DATA RETRIEVAL SCORING
+    # ====================================================================
+    # Keywords that indicate need for patient-specific data
+    patient_keywords = [
+        'my medication', 'my medications', 'medications', 'prescriptions',
+        'my discharge', 'discharge report', 'discharge summary',
+        'my restrictions', 'dietary restriction', 'restrictions',
+        'my follow-up', 'follow-up', 'follow up appointment',
+        'warning signs', 'warning sign', 'my condition', 'my health',
+        'my doctor', "doctor's orders", 'my lab results', 'lab results',
+        'my diagnosis', 'my treatment', 'my care plan',
+        'remind me', 'remember', 'what did', 'hospital records'
+    ]
+    
+    patient_pronouns = ['my', 'me', 'i have', "i'm on", "i take", "i need"]
+    
+    # Check for patient-specific pronouns + medical keywords
+    has_patient_pronoun = any(pronoun in query_lower for pronoun in patient_pronouns)
+    has_patient_keyword = any(keyword in query_lower for keyword in patient_keywords)
+    
+    if has_patient_keyword:
+        scores['get_patient_discharge_report'] += 0.8
+    
+    if has_patient_pronoun and has_patient_keyword:
+        scores['get_patient_discharge_report'] += 0.15  # Boost for personal context
+    
+    # ====================================================================
+    # NEPHROLOGY KNOWLEDGE BASE (RAG) SCORING
+    # ====================================================================
+    # Keywords indicating need for medical/educational information
+    rag_keywords = [
+        'what is', 'what are', 'explain', 'how does', 'how do',
+        'treatment', 'management', 'mechanism', 'causes', 'symptoms',
+        'pathophysiology', 'stages', 'classification', 'definition',
+        'diagnosis', 'prognosis', 'complications', 'risk factors',
+        'medication classes', 'drug interactions', 'nephrology'
+    ]
+    
+    has_rag_keyword = any(keyword in query_lower for keyword in rag_keywords)
+    
+    if has_rag_keyword:
+        scores['query_nephrology_docs'] += 0.8
+    
+    # Check if it's an educational/general medical question (not specific to patient)
+    if has_rag_keyword and not has_patient_pronoun:
+        scores['query_nephrology_docs'] += 0.1  # Boost for non-personal context
+    
+    # ====================================================================
+    # WEB SEARCH SCORING
+    # ====================================================================
+    # Keywords indicating need for latest research/current information
+    web_search_keywords = [
+        'latest', 'newest', 'new', 'recent', 'breakthrough', 'update',
+        'research', 'trial', 'clinical trial', 'study', 'studies',
+        'news', 'publication', 'article', 'current', 'today',
+        '2024', '2025', 'latest guideline', 'recent finding'
+    ]
+    
+    has_web_keyword = any(keyword in query_lower for keyword in web_search_keywords)
+    
+    if has_web_keyword:
+        scores['search_web'] += 0.8
+    
+    # ====================================================================
+    # ANTI-PATTERNS: REDUCE SCORES FOR WRONG TOOL USAGE
+    # ====================================================================
+    # Prevent patient data tool for general medical questions
+    if has_rag_keyword and not has_patient_pronoun:
+        scores['get_patient_discharge_report'] = max(0.0, scores['get_patient_discharge_report'] - 0.3)
+    
+    # Prevent web search for patient-specific questions
+    if has_patient_keyword and not has_web_keyword:
+        scores['search_web'] = max(0.0, scores['search_web'] - 0.3)
+    
+    # ====================================================================
+    # NORMALIZE SCORES TO 0-1 RANGE
+    # ====================================================================
+    max_score = max(scores.values()) if any(scores.values()) else 1.0
+    if max_score > 1.0:
+        for tool in scores:
+            scores[tool] = min(1.0, scores[tool] / max_score)
+    
+    return scores
+
+
+def _get_recommended_tools(query: str, threshold: float = 0.3) -> list[str]:
+    """
+    Get list of recommended tools based on query intent.
+    
+    Uses the scoring system to determine which tools are most appropriate
+    for the user's query. Only returns tools with score >= threshold.
+    
+    Args:
+        query: User's query text
+        threshold: Minimum score for tool recommendation (default 0.3)
+        
+    Returns:
+        List of tool names sorted by score (highest first)
+    """
+    scores = _score_tool_appropriateness(query)
+    
+    # Filter and sort by score
+    recommended = [
+        (tool, score) for tool, score in scores.items() 
+        if score >= threshold
+    ]
+    recommended.sort(key=lambda x: x[1], reverse=True)
+    
+    # Log the scores for debugging
+    print(f"[TOOL_SELECTION] Query: '{query[:80]}...'")
+    for tool, score in recommended:
+        print(f"[TOOL_SELECTION]   {tool}: {score:.2f}")
+    
+    return [tool for tool, _ in recommended]
+
+
+def _validate_tool_invocation(query: str, tool_name: str) -> tuple[bool, str]:
+    """
+    Validate whether a tool invocation is appropriate for the query.
+    
+    This implements guardrails against incorrect tool usage, which was
+    identified as TEST_003 failure in recommendations.md.
+    
+    Args:
+        query: User's query text
+        tool_name: Name of the tool being invoked
+        
+    Returns:
+        Tuple of (is_valid, explanation)
+    """
+    scores = _score_tool_appropriateness(query)
+    tool_score = scores.get(tool_name, 0.0)
+    
+    recommended_tools = _get_recommended_tools(query, threshold=0.2)
+    
+    # Check if this tool is in the top recommendations
+    if tool_name in recommended_tools[:2]:
+        # It's in top 2 recommendations - valid
+        explanation = f"Tool '{tool_name}' is appropriate (score: {tool_score:.2f})"
+        return True, explanation
+    elif tool_score > 0.5:
+        # Tool has good score even if not top - probably valid
+        explanation = f"Tool '{tool_name}' has reasonable score ({tool_score:.2f}) but alternatives exist: {recommended_tools}"
+        return True, explanation
+    else:
+        # Tool is not recommended
+        best_tool = recommended_tools[0] if recommended_tools else "None"
+        explanation = f"Tool '{tool_name}' not recommended for this query (score: {tool_score:.2f}). Consider using: {best_tool}"
+        print(f"[TOOL_VALIDATION_WARNING] {explanation}")
+        return False, explanation
+
+
 def _extract_patient_name(text: str) -> str | None:
     """
     Extract patient name from user input.
@@ -175,32 +354,51 @@ async def clinical_agent_node(state):
     llm = clinical_llm()
     
     # Build the system message with enhanced clinical prompting following medical agentic best practices
+    # LangGraph v1.0 best practice: Include tool routing guidance in system prompt
+    
+    # First, analyze the latest user message to recommend appropriate tools
+    latest_msg = _get_latest_user_message(messages)
+    recommended_tools = _get_recommended_tools(latest_msg) if latest_msg else []
+    
+    tool_guidance = ""
+    if recommended_tools:
+        tool_guidance = f"\n\nBased on the current query, PRIORITIZE these tools: {', '.join(recommended_tools)}"
+    
     system_instruction = (
         "You are an expert clinical assistant specializing in post-discharge patient support and nephrology. "
         "You understand the complex multidimensional needs of patients with kidney disease, including medication management, "
         "dietary restrictions, symptom monitoring, and emergency warning signs. "
         "\n\nTOOL USAGE RULES (MANDATORY - FOLLOW STRICTLY):"
-        "\n1. PATIENT DATA RETRIEVAL:"
-        "\n   - Use ALWAYS when patient mentions: medications, discharge info, restrictions, follow-up, warnings"
+        "\n1. PATIENT DATA RETRIEVAL (get_patient_discharge_report):"
+        "\n   - Use WHEN: Patient mentions PERSONAL medications, discharge info, restrictions, follow-up, warnings"
         "\n   - Keywords: 'my medication', 'my discharge', 'restrictions', 'follow-up', 'warning signs', 'remind me'"
-        "\n   - ALWAYS retrieve patient data FIRST before answering patient-specific questions"
-        "\n2. NEPHROLOGY KNOWLEDGE BASE (RAG):"
-        "\n   - Use for: disease mechanisms, treatment options, medical education, symptom management, pathophysiology"
+        "\n   - CRITICAL: ALWAYS retrieve patient data FIRST before answering patient-specific questions"
+        "\n   - DO NOT use for general medical education questions"
+        "\n2. NEPHROLOGY KNOWLEDGE BASE (query_nephrology_docs) - Use for GENERAL medical information:"
+        "\n   - Use WHEN: User asks about disease mechanisms, treatments, general education, symptoms"
         "\n   - Keywords: 'what is', 'explain', 'how does', 'treatment', 'management', 'stages', 'mechanism'"
-        "\n3. WEB SEARCH:"
-        "\n   - Use for: latest research, recent trials, new treatments, current guidelines, updates"
+        "\n   - CRITICAL: Do NOT use for patient-specific medication/restriction questions"
+        "\n   - This is for EDUCATIONAL content, not personal medical records"
+        "\n3. WEB SEARCH (search_web) - Use ONLY for latest research/updates:"
+        "\n   - Use WHEN: User asks for latest research, recent trials, new treatments, current guidelines"
         "\n   - Keywords: 'latest', 'new', 'recent', 'research', 'trial', 'breakthrough', 'update'"
-        "\n\nDECISION LOGIC:"
-        "\n- 'my/me/I' + medication/restriction/warning → Patient Data Tool"
-        "\n- 'what is/explain/how' + medical term → RAG Tool"
-        "\n- 'latest/new research/treatment' → Web Search Tool"
-        "\n- Multi-part questions: invoke appropriate tool for each part"
+        "\n   - Do NOT use for general medical knowledge or patient-specific questions"
+        "\n\nTOOL SELECTION DECISION TREE:"
+        "\nIF 'my' or 'I' + medical info → get_patient_discharge_report (patient personal)"
+        "\nELSE IF 'what is' or 'explain' + medical term → query_nephrology_docs (general knowledge)"
+        "\nELSE IF 'latest' or 'new research' → search_web (current updates)"
+        "\nELSE → Provide direct answer if no tool needed"
+        f"{tool_guidance}"
+        "\n\nIMPORTANT - PREVENT INCORRECT TOOL USAGE:"
+        "\n- NEVER use patient_data_retrieval for general medical questions like 'What is CKD?'"
+        "\n- NEVER use web_search for patient-specific questions like 'What are my medications?'"
+        "\n- ALWAYS match tool selection to query intent"
         "\n\nRESPONSE GUIDELINES:"
-        "\n- Begin with patient-specific context from their discharge data"
-        "\n- Provide evidence-based information with specifics (drug names, doses, routes)"
-        "\n- Contextualize general medical info to patient's condition"
-        "\n- Use detailed responses in clear language, maximum 20 sentences"
-        "\n- ALWAYS remind to consult their healthcare provider"
+        "\n- Start with patient-specific context if tools were used"
+        "\n- Provide evidence-based information with specific details (drug names, doses)"
+        "\n- Contextualize general medical info to patient's condition if available"
+        "\n- Use clear language, maximum 20 sentences per response"
+        "\n- ALWAYS remind patients to consult their healthcare provider"
         "\n- If uncertain, clearly state and suggest consulting provider"
     )
     
@@ -220,9 +418,34 @@ async def clinical_agent_node(state):
         print("[DEBUG] Processing tool results for synthesis")
         
         # We have tool results - include full conversation with proper message types
-        for msg in messages:
-            if isinstance(msg, (HumanMessage, AIMessage, ToolMessage)):
+        # Properly pair AIMessages with tool_calls to their corresponding ToolMessages
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            if isinstance(msg, AIMessage):
+                # Check if this AIMessage has tool_calls
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    # Check if next message is a ToolMessage with matching tool_call_id
+                    if i + 1 < len(messages) and isinstance(messages[i + 1], ToolMessage):
+                        # Tool call has a matching result - include both
+                        llm_messages.append(msg)
+                        llm_messages.append(messages[i + 1])
+                        i += 2
+                        continue
+                    else:
+                        # Tool call without result - skip to avoid Mistral error
+                        print(f"[DEBUG] Skipping AIMessage with unmatched tool_calls")
+                        i += 1
+                        continue
+                else:
+                    # Regular AI message without tool calls
+                    llm_messages.append(msg)
+            elif isinstance(msg, HumanMessage):
                 llm_messages.append(msg)
+            elif isinstance(msg, ToolMessage):
+                # Skip standalone ToolMessages (should have been paired with AIMessage above)
+                print(f"[DEBUG] Skipping unpaired ToolMessage")
+            i += 1
         
         # Ensure last message is from user or tool (required for some models like Mistral)
         if llm_messages and isinstance(llm_messages[-1], AIMessage):
@@ -239,33 +462,39 @@ async def clinical_agent_node(state):
                 )
     
     else:
-        # No tool results yet - bind tools so LLM can decide to call them
-        print("[DEBUG] No tool results - binding tools to LLM")
+        # No tool results yet - prepare to call LLM with tools available
+        print("[DEBUG] No tool results - LLM will have tools available")
         
+        # Add conversation history
+        for msg in messages:
+            if isinstance(msg, (HumanMessage, AIMessage)):
+                # Only add messages that are either HumanMessages or AIMessages WITHOUT tool_calls
+                # This prevents sending orphaned tool calls to Mistral
+                if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    print(f"[DEBUG] Skipping AIMessage with unmatched tool_calls")
+                    continue
+                llm_messages.append(msg)
+            elif isinstance(msg, ToolMessage):
+                # Tool messages should only appear after tool-calling AIMessages
+                # Skip any that don't have a preceding tool-call message
+                print(f"[DEBUG] Skipping standalone ToolMessage")
+                continue
+        
+        # Bind tools if available
         if clinical_agent_tools:
             try:
                 llm = llm.bind_tools(clinical_agent_tools)
                 print(f"[DEBUG] Bound {len(clinical_agent_tools)} tools to clinical LLM")
             except Exception as e:
-                # Tools binding failed, continue without tools
                 print(f"[WARN] Failed to bind tools: {e}")
-                pass
         
-        # Add conversation history using proper message types
-        for msg in messages:
-            if isinstance(msg, (HumanMessage, AIMessage, ToolMessage)):
-                llm_messages.append(msg)
-    
-    # Final check: ensure last message is not AIMessage without tool_calls
-    # (Required for Mistral and some other models)
-    if llm_messages and isinstance(llm_messages[-1], AIMessage):
-        last_ai_msg = llm_messages[-1]
-        # If it's not a tool-calling message, add a user prompt
-        if not (hasattr(last_ai_msg, 'tool_calls') and last_ai_msg.tool_calls):
-            print("[DEBUG] Appending continuation prompt")
-            llm_messages.append(
-                HumanMessage(content="Please continue with your response.")
-            )
+        # Ensure last message is HumanMessage for proper message sequence
+        if llm_messages and not isinstance(llm_messages[-1], HumanMessage):
+            if isinstance(llm_messages[-1], AIMessage):
+                print("[DEBUG] Appending HumanMessage after AIMessage")
+                llm_messages.append(
+                    HumanMessage(content="Please provide a response based on the information provided.")
+                )
     
     # ========================================================================
     # STREAMING IMPLEMENTATION
@@ -347,6 +576,14 @@ async def clinical_agent_node(state):
                 for idx in sorted(tool_calls_dict.keys())
             ]
             print(f"[DEBUG] Aggregated {len(tool_calls_list)} tool calls")
+            
+            # VALIDATION: Check if tool selections are appropriate
+            latest_msg = _get_latest_user_message(messages)
+            if latest_msg:
+                for i, tc in enumerate(tool_calls_list):
+                    tool_name = tc.get('name', 'unknown')
+                    is_valid, explanation = _validate_tool_invocation(latest_msg, tool_name)
+                    print(f"[TOOL_VALIDATION] Tool {i+1}: {explanation}")
         
         # Create the final response message
         # IMPORTANT: Don't pass tool_calls=None, either pass a list or omit it entirely

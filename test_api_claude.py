@@ -19,9 +19,9 @@ from pathlib import Path
 load_dotenv()
 
 # Mistral Configuration
-MISTRAL_API_KEY = os.getenv("mistral_api_key")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
-LLM_MODEL = os.getenv("mistral_model")
+LLM_MODEL = os.getenv("LLM_MODEL")
 
 # App Configuration
 APP_BASE_URL = "http://localhost:5000"
