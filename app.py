@@ -64,7 +64,13 @@ async def lifespan(app: FastAPI):
     global chatbot
     # Startup
     print("Starting Clinical Agent API server...")
-    print("Access the UI at: http://localhost:5000")
+    # If DEPLOYED_URL is set in the environment, show that as a friendly reference
+    deployed_url = os.getenv('DEPLOYED_URL')
+    if deployed_url:
+        print(f"Access the UI at: {deployed_url}")
+    else:
+        port = os.environ.get("PORT", "5000")
+        print(f"Access the UI at: http://localhost:{port}")
     print("API endpoints:")
     print("  - GET  /api/health - Health check")
     print("  - POST /api/chat - Send chat message")
@@ -87,8 +93,12 @@ app = FastAPI( # Create a new FastAPI application instance
 # Configure CORS
 app.add_middleware( # Add CORS middleware to the application
     CORSMiddleware, # Middleware class for CORS
-    allow_origins=["http://localhost:5000", "http://127.0.0.1:5000"],  # Allow specified origins to access the API (adjust as needed in production)
-    allow_credentials=True, # Allow credentials (e.g., cookies, authorization headers) to be sent with requests
+    # Make allowed origins configurable via `ALLOWED_ORIGINS` environment variable
+    # If not set, default to allowing all origins which is convenient for Cloud Run deployment.
+    allow_origins=(lambda: [o.strip() for o in os.getenv('ALLOWED_ORIGINS','*').split(',')] if os.getenv('ALLOWED_ORIGINS') else ['*'])(),
+    # If you need to send credentials from the browser, set ALLOWED_ORIGINS to a
+    # comma-separated list of allowed origins and set ALLOW_CREDENTIALS=true in env.
+    allow_credentials=(os.getenv('ALLOW_CREDENTIALS','false').lower() == 'true'),
     allow_methods=["*"], # Allow all HTTP methods (GET, POST, etc.)
     allow_headers=["*"], # Allow all HTTP headers
 )
@@ -375,10 +385,11 @@ async def api_get_patients():
 
 if __name__ == '__main__': # Standard boilerplate to run the application directly
     print("Starting Clinical Agent API server...") # Log message indicating server startup
-    print("Access the UI at: http://localhost:5000") # Provide the URL for accessing the UI
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Access the UI at: http://localhost:{port}") # Provide the URL for accessing the UI
     print("API endpoints:") # List available API endpoints
     print("  - GET  /api/health - Health check") # Health check endpoint description
     print("  - POST /api/chat - Send chat message") # Chat message endpoint description
     print("  - GET  /api/threads - List all threads") # List threads endpoint description
-    uvicorn.run(app, host="0.0.0.0", port=5000) # Run the FastAPI application using Uvicorn on all available network interfaces and port 5000
+    uvicorn.run(app, host="0.0.0.0", port=port) # Run the FastAPI application using Uvicorn on all available network interfaces and the configured port
 

@@ -580,7 +580,10 @@
     </div>
 
     <script>
-      const API_URL = "http://localhost:5000/api";
+      // Use a relative API path so the client calls the same origin where
+      // the web UI is hosted (works on Cloud Run / any host). Avoid hard-
+      // coding localhost which will point to the user's machine in the browser.
+      const API_URL = "/api";
 
       // DOM Elements
       const elements = {

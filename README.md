@@ -9,6 +9,8 @@
 
 ---
 
+**Live demo:** [https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app](https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app)
+
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
@@ -98,7 +100,8 @@ pytest tests/ -v
 
 # 6. Run the application
 python app.py
-# Open http://localhost:8000 in your browser
+# Open the deployed UI in your browser:
+# https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app
 ```
 
 ---
@@ -151,7 +154,7 @@ python app.py
 
 ```
 MediFlow/
-├── 📄 app.py                          # FastAPI entry point (localhost:8000)
+├── 📄 app.py                          # FastAPI entry point (serves web UI; see deployed URL below)
 ├── 📄 requirements.txt                # Python dependencies
 ├── 🐳 Dockerfile                      # Container configuration
 ├── 📝 README.md                       # This file
@@ -313,7 +316,8 @@ config = {"recursion_limit": 25}  # Max tool calls
 
 ```bash
 python app.py
-# Open http://localhost:8000
+# Open the deployed UI:
+# https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app
 ```
 
 ### Option 2: Command Line
@@ -578,7 +582,7 @@ pytest tests/ -v --cov=src
 
 - 🏗️ [Architecture Details](docs/plan.md) - Deep dive into design decisions
 - 🎨 [UI Documentation](docs/README_UI.md) - Frontend guide
-- 📖 [API Reference](http://localhost:8000/docs) - Interactive Swagger docs
+- 📖 [API Reference](https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app/docs) - Interactive Swagger docs
 
 ### Framework Documentation
 

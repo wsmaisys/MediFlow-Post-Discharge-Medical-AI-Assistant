@@ -5,11 +5,13 @@ A simple web-based chat interface for the Clinical Agent.
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    pip install flask flask-cors
    ```
 
 2. **Ensure all other dependencies are installed:**
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -23,12 +25,13 @@ A simple web-based chat interface for the Clinical Agent.
 ## Running the Application
 
 1. **Start the Flask server:**
+
    ```bash
    python app.py
    ```
 
 2. **Open your browser:**
-   Navigate to `http://localhost:5000`
+   Navigate to `https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app`
 
 3. **Start chatting:**
    - Type your questions in the input field
@@ -61,4 +64,3 @@ A simple web-based chat interface for the Clinical Agent.
 - **"Network error"** - Make sure the Flask server is running (`python app.py`)
 - **"No response from agent"** - Check that your MISTRAL_API_KEY is set correctly
 - **Import errors** - Make sure all dependencies are installed: `pip install -r requirements.txt`
-
