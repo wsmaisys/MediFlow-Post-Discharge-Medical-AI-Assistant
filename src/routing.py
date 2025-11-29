@@ -134,3 +134,8 @@ def route_from_clinical_agent(state) -> str:
         return "clinical_tools"
     
     return "__end__"
+
+
+# Compatibility alias: older callers/tests expect `route_receptionist`
+# Keep the newer `route_from_receptionist` name but provide the alias
+route_receptionist = route_from_receptionist
