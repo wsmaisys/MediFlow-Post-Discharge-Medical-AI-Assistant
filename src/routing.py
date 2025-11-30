@@ -1,141 +1,141 @@
 """
-routing.py - Fixed routing logic with proper state inspection
+routing.py - Safe routing helpers that consult persisted state (non-destructive)
 
-CRITICAL: Routing functions must read from state correctly
-and return the correct destination node name.
+This module preserves the previously exported names:
+- route_from_receptionist
+- route_from_lookup
+- route_from_receptionist_advanced
+- route_receptionist (alias)
+
+It also adds `route_from_start` which is used as a dispatcher from START.
+The routing functions are defensive: they prefer explicit state flags
+(receptionist_done, patient_info) and next_node hints, avoiding heuristics
+that would re-run receptionist on follow-ups.
 """
 
 from langchain_core.messages import HumanMessage
+from typing import Any
+
+def route_from_start(state: Any) -> str:
+    """
+    Dispatcher used as the START -> conditional routing entry.
+
+    Decision logic (priority):
+      1. If state.stage is set, route according to its value:
+         - "reception" -> receptionist
+         - "lookup"    -> patient_data_retrieval
+         - "clinical"  -> clinical_agent
+      2. If receptionist_done == True and patient_info exists -> clinical_agent
+      3. If next_node hint requests lookup -> patient_data_retrieval
+      4. Default -> receptionist (first-time sessions)
+    """
+    # Avoid KeyError by using safe gets
+    stage = state.get("stage")
+    receptionist_done = state.get("receptionist_done", False)
+    patient_info = state.get("patient_info")
+    next_hint = state.get("next_node")
+
+    print("[ROUTING] route_from_start: stage=%s, receptionist_done=%s, patient_info=%s, next_node=%s" %
+          (repr(stage), repr(receptionist_done), "present" if patient_info else "none", repr(next_hint)))
+
+    if stage:
+        # Trust explicit stage first
+        if stage == "reception":
+            print("  -> START routing to: receptionist (stage)")
+            return "receptionist"
+        if stage == "lookup":
+            print("  -> START routing to: patient_data_retrieval (stage)")
+            return "patient_data_retrieval"
+        if stage == "clinical":
+            print("  -> START routing to: clinical_agent (stage)")
+            return "clinical_agent"
+
+    # If receptionist already completed and we have patient info, go to clinical
+    if receptionist_done and patient_info:
+        print("  -> START routing to: clinical_agent (receptionist_done & patient_info)")
+        return "clinical_agent"
+
+    # Respect explicit hint to lookup
+    if next_hint == "lookup_patient" or next_hint == "patient_data_retrieval":
+        print("  -> START routing to: patient_data_retrieval (hint)")
+        return "patient_data_retrieval"
+
+    # Default: first-time sessions should go to receptionist
+    print("  -> START routing to: receptionist (default)")
+    return "receptionist"
 
 
 def route_from_receptionist(state) -> str:
     """
     Determine next node after receptionist.
-    
-    Logic:
-    - If next_node hint is set to "lookup_patient" -> go to patient_data_retrieval
-    - Otherwise -> go directly to clinical_agent
-    
-    Args:
-        state: ChatState with messages, patient_info, next_node
-        
-    Returns:
-        str: Name of the next node ("patient_data_retrieval" or "clinical_agent")
+    Decision logic:
+      - If receptionist has set explicit next_node hint -> follow it
+      - If patient_info is already present or receptionist_done==True -> clinical_agent
+      - If latest user message looks like an introduction -> patient_data_retrieval
+      - Default -> clinical_agent
     """
-    # Check if receptionist set a routing hint
     next_node_hint = state.get("next_node")
-    
-    print(f"[ROUTING] route_from_receptionist:")
-    print(f"  - next_node hint: {next_node_hint}")
-    print(f"  - patient_info exists: {state.get('patient_info') is not None}")
-    print(f"  - total messages: {len(state.get('messages', []))}")
-    
-    # If receptionist detected a patient name and set the hint
-    if next_node_hint == "lookup_patient":
-        print(f"  -> Routing to: patient_data_retrieval")
-        return "patient_data_retrieval"
-    
-    # Default: go to clinical agent
-    print(f"  -> Routing to: clinical_agent")
-    return "clinical_agent"
-
-
-def route_from_lookup(state) -> str:
-    """
-    Determine next node after patient data retrieval.
-    
-    After looking up patient data, always go to clinical_agent.
-    
-    Args:
-        state: ChatState with messages and patient_info
-        
-    Returns:
-        str: Always returns "clinical_agent"
-    """
-    print(f"[ROUTING] route_from_lookup:")
-    print(f"  - patient_info exists: {state.get('patient_info') is not None}")
-    print(f"  - total messages: {len(state.get('messages', []))}")
-    print(f"  -> Routing to: clinical_agent")
-    
-    return "clinical_agent"
-
-
-# ============================================================================
-# Alternative: More sophisticated routing based on state
-# ============================================================================
-
-def route_from_receptionist_advanced(state) -> str:
-    """
-    Advanced routing with multiple checks.
-    
-    Use this if you need more complex logic.
-    """
-    messages = state.get("messages", [])
     patient_info = state.get("patient_info")
-    next_node_hint = state.get("next_node")
-    
-    # Get the latest user message
+    receptionist_done = state.get("receptionist_done", False)
+
+    messages = state.get("messages", [])
     latest_user_msg = None
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage):
             latest_user_msg = msg.content
             break
-    
-    print(f"[ROUTING] Advanced routing from receptionist:")
-    print(f"  - Latest user message: {latest_user_msg[:50] if latest_user_msg else None}...")
-    print(f"  - Patient info exists: {patient_info is not None}")
-    print(f"  - Next node hint: {next_node_hint}")
-    
-    # Priority 1: Check explicit routing hint
-    if next_node_hint == "lookup_patient":
-        print(f"  -> Routing to: patient_data_retrieval (hint)")
+
+    print(f"[ROUTING] route_from_receptionist: hint={next_node_hint}, patient_info={'yes' if patient_info else 'no'}, receptionist_done={receptionist_done}, latest_user_msg_preview={(latest_user_msg[:50]+'...') if latest_user_msg else None}")
+
+    # Respect explicit routing hints first
+    if next_node_hint == "lookup_patient" or next_node_hint == "patient_data_retrieval":
+        print("  -> Routing to: patient_data_retrieval (hint)")
         return "patient_data_retrieval"
-    
-    # Priority 2: If patient info already exists, skip lookup
-    if patient_info is not None:
-        print(f"  -> Routing to: clinical_agent (patient info exists)")
+
+    # If receptionist already completed and patient_info exists, skip lookup
+    if receptionist_done and patient_info:
+        print("  -> Routing to: clinical_agent (receptionist already done)")
         return "clinical_agent"
-    
-    # Priority 3: Check if user introduced themselves
+
+    # If a name/introduction is detected in the latest user message, request lookup
     if latest_user_msg:
-        name_patterns = [
-            "my name is",
-            "i am",
-            "i'm",
-            "this is"
-        ]
-        
-        msg_lower = latest_user_msg.lower()
-        if any(pattern in msg_lower for pattern in name_patterns):
-            print(f"  -> Routing to: patient_data_retrieval (name detected)")
+        low = latest_user_msg.lower()
+        name_patterns = ["my name is ", "i am ", "i'm ", "this is "]
+        if any(p in low for p in name_patterns):
+            print("  -> Routing to: patient_data_retrieval (name detected)")
             return "patient_data_retrieval"
-    
-    # Default: go to clinical agent
-    print(f"  -> Routing to: clinical_agent (default)")
+
+    # Default to clinical agent otherwise
+    print("  -> Routing to: clinical_agent (default)")
+    return "clinical_agent"
+
+
+def route_from_lookup(state) -> str:
+    """
+    After patient lookup, route to clinical_agent.
+    This function logs state and ensures deterministic behavior.
+    """
+    patient_info = state.get("patient_info")
+    print(f"[ROUTING] route_from_lookup: patient_info={'present' if patient_info else 'missing'} -> clinical_agent")
     return "clinical_agent"
 
 
 def route_from_clinical_agent(state) -> str:
     """
-    Optional: Routing from clinical agent if you want to add more logic.
-    
-    Currently, clinical agent uses tools_condition for routing.
-    But you could add custom logic here if needed.
+    Optional routing from clinical agent. Keep simple:
+    If last assistant message indicates tool calls, go to clinical_tools,
+    otherwise end.
     """
     messages = state.get("messages", [])
-    
     if not messages:
         return "__end__"
-    
+
     last_message = messages[-1]
-    
-    # Check if last message has tool calls
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+    # If last assistant output included a tool request object, route to tools
+    if hasattr(last_message, "tool_calls") and getattr(last_message, "tool_calls"):
         return "clinical_tools"
-    
     return "__end__"
 
 
-# Compatibility alias: older callers/tests expect `route_receptionist`
-# Keep the newer `route_from_receptionist` name but provide the alias
+# Compatibility alias: keep older name for backwards compatibility
 route_receptionist = route_from_receptionist

@@ -19,7 +19,7 @@ def receptionist_llm():
         # Use the small model (faster, cheaper, sufficient for greetings)
         model_name="mistral-small-latest",
         # Temperature 0 = deterministic, consistent responses
-        temperature=0
+        temperature=0.2
     )
 
 
@@ -35,6 +35,6 @@ def clinical_llm():
         # Use the small model (sufficient for medical Q&A with tools)
         model_name="mistral-small-latest",
         # Temperature 0 = deterministic, consistent medical answers
-        temperature=0
+        temperature=0.2
     )
 

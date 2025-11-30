@@ -1,8 +1,14 @@
 """
-state_and_graph.py - Fixed state schema with proper message handling
+state_and_graph.py - Fixed state schema with safe, optional stage flags
 
-CRITICAL FIX: Use add_messages reducer to append messages correctly
-This ensures conversation history flows through all nodes.
+This file intentionally keeps the same exported symbols:
+- ChatState (TypedDict)
+- graph (StateGraph)
+- checkpointer (MemorySaver)
+
+We add optional state fields (stage, receptionist_done, patient_verified)
+which are backward-compatible and safe: existing code that ignores them
+continues to work. The add_messages reducer is preserved for 'messages'.
 """
 
 from typing import Annotated, TypedDict, Optional
@@ -11,44 +17,44 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-
+# ChatState schema used by the rest of the application.
+# NOTE: New fields (stage, receptionist_done, patient_verified) are optional
+# and default to None/False — this keeps backward compatibility.
 class ChatState(TypedDict):
     """
     State schema for the chatbot conversation.
-    
-    IMPORTANT: The 'messages' field uses add_messages reducer.
-    This means when nodes return {"messages": [new_msg]}, the new message
-    is APPENDED to existing messages, not replaced.
-    
-    Without the reducer, each node would overwrite previous messages!
+
+    Fields:
+      - messages: list of BaseMessage with add_messages reducer (append semantics)
+      - patient_info: optional dict with patient lookup results
+      - next_node: optional routing hint set by nodes
+      - stage: optional string enum controlling dispatcher ("reception"|"lookup"|"clinical")
+      - receptionist_done: optional flag set once receptionist work is completed
+      - patient_verified: optional flag set once patient lookup/verification succeeded
     """
-    # Annotated with add_messages reducer for proper message accumulation
+    # messages uses the add_messages reducer so nodes append rather than overwrite
     messages: Annotated[list[BaseMessage], add_messages]
-    
-    # Patient information retrieved from database
+
+    # existing optional fields
     patient_info: Optional[dict]
-    
-    # Routing hint for conditional edges (optional)
     next_node: Optional[str]
 
+    # new optional flags (backwards compatible)
+    stage: Optional[str]
+    receptionist_done: Optional[bool]
+    patient_verified: Optional[bool]
 
-# Initialize the state graph with our schema
+
+# Initialize the StateGraph and checkpointer (names preserved)
 graph = StateGraph(ChatState)
-
-# Initialize checkpointer for conversation persistence
 checkpointer = MemorySaver()
 
 
-# ============================================================================
-# Alternative: If you want to explicitly see what's happening
-# ============================================================================
-
+# For development/debugging: optional custom debug reducer exists but is not active
 def debug_state_reducer(existing: list, new: list) -> list:
     """
     Custom reducer that logs state changes (for debugging).
-    
-    This does the same thing as add_messages but with logging.
-    Use this temporarily if you need to debug state flow.
+    Behaves like add_messages plus prints; useful temporarily.
     """
     print(f"[STATE DEBUG] Existing messages: {len(existing)}")
     print(f"[STATE DEBUG] New messages: {len(new)}")
@@ -56,9 +62,12 @@ def debug_state_reducer(existing: list, new: list) -> list:
     print(f"[STATE DEBUG] Combined messages: {len(result)}")
     return result
 
-
-# Uncomment this to use debug reducer instead:
+# If you want to temporarily enable the debug reducer, uncomment below and update
+# the ChatState type references in your code to use ChatStateDebug.
 # class ChatStateDebug(TypedDict):
 #     messages: Annotated[list[BaseMessage], debug_state_reducer]
 #     patient_info: Optional[dict]
 #     next_node: Optional[str]
+#     stage: Optional[str]
+#     receptionist_done: Optional[bool]
+#     patient_verified: Optional[bool]

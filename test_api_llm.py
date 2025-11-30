@@ -24,7 +24,8 @@ MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
 LLM_MODEL = os.getenv("LLM_MODEL")
 
 # App Configuration
-APP_BASE_URL = "http://localhost:5000"
+APP_BASE_URL = "http://localhost:5000/"
+#APP_BASE_URL = "https://mediflow-ai-medical-assistant-785629432566.us-central1.run.app/"
 APP_CHAT_ENDPOINT = f"{APP_BASE_URL}/api/chat"
 APP_HEALTH_ENDPOINT = f"{APP_BASE_URL}/api/health"
 
