@@ -39,6 +39,54 @@ def _extract_patient_name(text: str) -> str | None:
 def _same_patient(left: str | None, right: str | None) -> bool:
     return bool(left and right and left.strip().lower() == right.strip().lower())
 
+def _contains_clinical_request(text: str) -> bool:
+    if not text:
+        return False
+
+    lowered = text.lower()
+    clinical_terms = [
+        "medication",
+        "medications",
+        "medicine",
+        "dose",
+        "diet",
+        "eat",
+        "avoid",
+        "restriction",
+        "restrictions",
+        "follow-up",
+        "follow up",
+        "appointment",
+        "warning",
+        "symptom",
+        "symptoms",
+        "pain",
+        "swelling",
+        "shortness of breath",
+        "tired",
+        "fatigue",
+        "what should",
+        "what do i",
+        "can i",
+        "should i",
+        "help me",
+        "explain",
+    ]
+    verification_terms = [
+        "my name is",
+        "i am",
+        "i'm",
+        "this is",
+        "discharge date",
+        "discharged",
+    ]
+
+    has_clinical_term = any(term in lowered for term in clinical_terms)
+    has_question = "?" in text
+    verification_only = any(term in lowered for term in verification_terms) and not has_clinical_term and not has_question
+
+    return (has_clinical_term or has_question) and not verification_only
+
 def route_from_start(state: Any) -> str:
     """
     Dispatcher used as the START -> conditional routing entry.
@@ -137,10 +185,15 @@ def route_from_receptionist(state) -> str:
 
 def route_from_lookup(state) -> str:
     """
-    After patient lookup, route to clinical_agent.
-    This function logs state and ensures deterministic behavior.
+    After patient lookup, answer clinically only when the user's lookup turn
+    also included a clinical request. Plain verification should end the turn.
     """
     patient_info = state.get("patient_info")
+    latest_user_msg = _latest_user_message(state)
+    if patient_info and state.get("patient_verified") and not _contains_clinical_request(latest_user_msg):
+        print("[ROUTING] route_from_lookup: verified lookup only -> __end__")
+        return "__end__"
+
     print(f"[ROUTING] route_from_lookup: patient_info={'present' if patient_info else 'missing'} -> clinical_agent")
     return "clinical_agent"
 

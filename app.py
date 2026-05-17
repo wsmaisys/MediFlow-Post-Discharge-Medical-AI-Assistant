@@ -244,8 +244,11 @@ async def chat_stream(chat_message: ChatMessage): # Asynchronous function to han
                                     if candidate and len(candidate) > len(full_content):
                                         full_content = candidate
                             else:
-                                # Iterate node-like entries (some backends emit nodes)
-                                for node_value in serializable_event.values():
+                                # Iterate node-like entries. Tool output can be very long
+                                # and is evidence for the final answer, not the final answer.
+                                for node_name, node_value in serializable_event.items():
+                                    if str(node_name).lower() in {"clinical_tools", "tools"}:
+                                        continue
                                     if isinstance(node_value, dict) and isinstance(node_value.get("messages"), list):
                                         for m in node_value.get("messages", []):
                                             if isinstance(m, str):

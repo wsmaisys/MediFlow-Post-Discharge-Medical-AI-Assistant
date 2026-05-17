@@ -48,5 +48,7 @@ Thumbs.db
 # Project specific
 checkpoints/
 .pytest_cache/
+pytest-cache-files-*/
 htmlcov/
 .coverage
+*.log

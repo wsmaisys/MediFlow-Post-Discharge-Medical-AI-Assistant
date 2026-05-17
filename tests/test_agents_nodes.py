@@ -6,7 +6,7 @@ import pytest
 import sys
 import os
 from unittest.mock import patch, MagicMock, AsyncMock
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -122,6 +122,52 @@ class TestClinicalAgentNode:
             # Expected due to mocking complexity
             pass
 
+    @patch('agents_nodes.clinical_agent_tools', [])
+    @patch('agents_nodes.clinical_llm')
+    @pytest.mark.asyncio
+    async def test_clinical_node_preserves_tool_message_order(self, mock_clinical_llm):
+        """Tool results should not have a synthetic HumanMessage inserted before them."""
+        from agents_nodes import clinical_agent_node
+        from state_and_graph import ChatState
+
+        captured_messages = []
+        mock_llm_instance = MagicMock()
+
+        async def mock_astream(messages):
+            captured_messages.extend(messages)
+            yield AIMessage(content="CKD explanation")
+
+        mock_llm_instance.astream = mock_astream
+        mock_clinical_llm.return_value = mock_llm_instance
+
+        tool_call_id = "call_123"
+        state = ChatState(
+            messages=[
+                HumanMessage(content="Tell me more about my disease."),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "query_nephrology_docs",
+                            "args": {"query": "CKD causes"},
+                            "id": tool_call_id,
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+                ToolMessage(content="Found CKD source material.", tool_call_id=tool_call_id),
+            ],
+            patient_info={"patient_name": "Ahmed Hassan", "primary_diagnosis": "Chronic Kidney Disease Stage 4"},
+            stage="clinical",
+        )
+
+        result = await clinical_agent_node(state)
+
+        assert result["messages"][0].content == "CKD explanation"
+        tool_index = next(i for i, message in enumerate(captured_messages) if isinstance(message, ToolMessage))
+        assert isinstance(captured_messages[tool_index - 1], AIMessage)
+        assert getattr(captured_messages[tool_index - 1], "tool_calls", None)
+
 
 class TestPatientDataRetrievalNode:
     """Test patient data retrieval node."""
@@ -232,6 +278,30 @@ class TestPatientDataRetrievalNode:
         assert result["active_patient_name"] == "Maria Garcia"
         assert result["patient_info"]["primary_diagnosis"] == "Acute Kidney Injury"
         mock_tool.ainvoke.assert_awaited_once()
+
+    @patch('agents_nodes.patient_data_tool')
+    @pytest.mark.asyncio
+    async def test_latest_user_name_overrides_stale_lookup_name(self, mock_tool):
+        """A corrected name in the latest message should replace stale failed lookup state."""
+        from agents_nodes import patient_data_retrieval_node
+        from state_and_graph import ChatState
+
+        mock_tool.ainvoke = AsyncMock(return_value='{"patient_name": "Ahmed Hassan", "discharge_date": "2024-01-28", "primary_diagnosis": "Chronic Kidney Disease Stage 4"}')
+
+        state = ChatState(
+            messages=[HumanMessage(content="I am Ahmed Hassan and my discharge date is 2024-01-28")],
+            patient_name="Hassan Ahmed",
+            patient_discharge_date=None,
+            patient_info=None,
+            patient_verified=False,
+            stage="lookup",
+        )
+
+        result = await patient_data_retrieval_node(state)
+
+        assert result["patient_verified"] is True
+        assert result["active_patient_name"] == "Ahmed Hassan"
+        mock_tool.ainvoke.assert_awaited_once_with("Ahmed Hassan")
 
 
 class TestAgentIntegration:

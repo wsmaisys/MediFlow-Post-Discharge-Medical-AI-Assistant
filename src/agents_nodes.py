@@ -355,18 +355,16 @@ async def patient_data_retrieval_node(state: dict) -> dict:
     """
     Look up patient information.
     """
-    patient_name = state.get("patient_name")
-    if not patient_name:
-        latest_user = _get_latest_user_message(state.get("messages", []))
-        patient_name = _extract_patient_name(latest_user)
+    latest_user = _get_latest_user_message(state.get("messages", []))
+    latest_name = _extract_patient_name(latest_user)
+    latest_discharge_date = _extract_discharge_date(latest_user)
+    patient_name = latest_name or state.get("patient_name")
 
     if state.get("patient_verified") and _same_patient(patient_name, state.get("active_patient_name")):
         print("[LOOKUP] patient_data_retrieval_node skipped because active patient is already verified")
         return {}
 
-    discharge_date = state.get("patient_discharge_date") or _extract_discharge_date(
-        _get_latest_user_message(state.get("messages", []))
-    )
+    discharge_date = latest_discharge_date or state.get("patient_discharge_date")
     
     if not patient_name:
         msg = AIMessage(content="I need your name to look up your records. Could you please introduce yourself?")
@@ -410,7 +408,7 @@ async def patient_data_retrieval_node(state: dict) -> dict:
                 "stage": "lookup",
                 "active_patient_name": None,
             }
-        confirmation = AIMessage(content="I found your records. Now I'll connect you with clinical support.")
+        confirmation = AIMessage(content="I found your records. What would you like help with: medications, diet, follow-up, or warning signs?")
         
         return {
             "messages": [confirmation],
@@ -457,8 +455,10 @@ async def clinical_agent_node(state: dict) -> dict:
         "You are MediFlow, a post-discharge medical assistant focused on nephrology support. "
         "You are not a replacement for a clinician and must give safety-first guidance. "
         "Ground patient-specific answers only in the Patient Data block provided in this conversation; never invent medications, doses, diagnoses, lab values, dates, restrictions, or follow-up plans. "
+        "Do not infer the cause of a patient's kidney disease from discharge precautions, medication lists, or generic CKD risk factors; if the record does not state the cause, say it is not specified in the discharge record. "
         "If patient data is missing, say you do not have the discharge record loaded and ask the user to provide their full name before answering patient-specific questions. "
         "For general nephrology education, prefer the nephrology knowledge-base tool. For current guidelines, trials, approvals, recalls, or news, use web search. "
+        "When using nephrology knowledge-base or medical RAG information, translate it into simple patient-friendly language, briefly explain unavoidable medical terms, and avoid high medical jargon unless the user asks for technical detail. "
         "When tool evidence is unavailable or insufficient, clearly say what is unknown and suggest contacting the discharge team or clinician. "
         "Keep responses concise, practical, and include urgent red flags when relevant."
     )
@@ -496,18 +496,13 @@ async def clinical_agent_node(state: dict) -> dict:
         except Exception as e:
             print(f"[CLIN] Warning: failed to bind tools: {e}")
     
-    # Ensure we end with a user message for the model to respond to.
-    # IMPORTANT: Do not place a `HumanMessage` after any `ToolMessage` (Mistral rejects 'user' after 'tool').
-    if not llm_messages or not isinstance(llm_messages[-1], HumanMessage):
+    # Ensure normal turns end with a user message for the model to respond to.
+    # Tool-result turns must preserve assistant-with-tool-call -> tool ordering;
+    # inserting a synthetic user prompt around ToolMessage breaks Mistral ordering.
+    has_tool_messages = any(isinstance(m, ToolMessage) for m in llm_messages)
+    if not has_tool_messages and (not llm_messages or not isinstance(llm_messages[-1], HumanMessage)):
         trailing_prompt = HumanMessage(content="Please provide a clear, concise clinical response to the user's request.")
-
-        # If there are tool messages in the conversation, insert the user prompt before the first ToolMessage
-        # so that no `HumanMessage` appears after a `ToolMessage` (which triggers Mistral's "Unexpected role 'user' after role 'tool'" error).
-        first_tool_idx = next((i for i, m in enumerate(llm_messages) if isinstance(m, ToolMessage)), None)
-        if first_tool_idx is not None:
-            llm_messages.insert(first_tool_idx, trailing_prompt)
-        else:
-            llm_messages.append(trailing_prompt)
+        llm_messages.append(trailing_prompt)
     
     # Streaming accumulation
     response_content = ""
@@ -620,14 +615,11 @@ async def stream_clinical_response(state: dict, callback=None):
         except Exception:
             pass
 
-    # Ensure we do not place a `HumanMessage` after any `ToolMessage` (Mistral rejects 'user' after 'tool').
-    if not llm_messages or not isinstance(llm_messages[-1], HumanMessage):
+    # Preserve assistant-with-tool-call -> tool ordering on tool-result turns.
+    has_tool_messages = any(isinstance(m, ToolMessage) for m in llm_messages)
+    if not has_tool_messages and (not llm_messages or not isinstance(llm_messages[-1], HumanMessage)):
         trailing_prompt = HumanMessage(content="Please provide a clear, concise clinical response to the user's request.")
-        first_tool_idx = next((i for i, m in enumerate(llm_messages) if isinstance(m, ToolMessage)), None)
-        if first_tool_idx is not None:
-            llm_messages.insert(first_tool_idx, trailing_prompt)
-        else:
-            llm_messages.append(trailing_prompt)
+        llm_messages.append(trailing_prompt)
 
     async for chunk in llm.astream(llm_messages):
         if callback:

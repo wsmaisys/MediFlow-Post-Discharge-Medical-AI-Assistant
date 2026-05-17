@@ -764,7 +764,13 @@
                       nodeThoughtMap.set(nodeName, el);
                     }
 
-                    if (nodeData.messages && Array.isArray(nodeData.messages)) {
+                    const isToolNode =
+                      nodeName === "clinical_tools" ||
+                      nodeName.toLowerCase().includes("tool") ||
+                      nodeName.toLowerCase().includes("search") ||
+                      nodeName.toLowerCase().includes("rag");
+
+                    if (!isToolNode && nodeData.messages && Array.isArray(nodeData.messages)) {
                       nodeData.messages.forEach((m) => {
                         if (!m) return;
                         if (typeof m === "string") chunkText += m;

@@ -97,11 +97,12 @@ async def initialize_chatbot():
         },
     )
 
-    # After patient lookup, always go to clinical agent
+    # After patient lookup, only continue to clinical if the lookup turn also
+    # contained a clinical request. Plain verification ends the turn.
     graph.add_conditional_edges(
         "patient_data_retrieval",
         route_from_lookup,
-        {"clinical_agent": "clinical_agent"},
+        {"clinical_agent": "clinical_agent", "__end__": END},
     )
 
     # Clinical agent routing: use tools if needed, or end conversation

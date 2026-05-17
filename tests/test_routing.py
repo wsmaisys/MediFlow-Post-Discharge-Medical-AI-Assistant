@@ -129,6 +129,44 @@ class TestRoutingEdgeCases:
         route = route_from_start(state)
         assert route == "patient_data_retrieval"
 
+    def test_lookup_verification_only_ends_turn(self):
+        """A successful date verification should not force a clinical response."""
+        from routing import route_from_lookup
+        from state_and_graph import ChatState
+        from langchain_core.messages import HumanMessage, AIMessage
+
+        state = ChatState(
+            messages=[
+                HumanMessage(content="My discharge date is 2024-01-28"),
+                AIMessage(content="I found your records. What would you like help with?"),
+            ],
+            patient_info={"patient_name": "Ahmed Hassan", "discharge_date": "2024-01-28"},
+            patient_verified=True,
+            stage="clinical",
+        )
+
+        route = route_from_lookup(state)
+        assert route == "__end__"
+
+    def test_lookup_with_clinical_question_routes_to_clinical(self):
+        """If the verification turn also asks a clinical question, continue."""
+        from routing import route_from_lookup
+        from state_and_graph import ChatState
+        from langchain_core.messages import HumanMessage, AIMessage
+
+        state = ChatState(
+            messages=[
+                HumanMessage(content="My discharge date is 2024-01-28. What medications should I take?"),
+                AIMessage(content="I found your records. What would you like help with?"),
+            ],
+            patient_info={"patient_name": "Ahmed Hassan", "discharge_date": "2024-01-28"},
+            patient_verified=True,
+            stage="clinical",
+        )
+
+        route = route_from_lookup(state)
+        assert route == "clinical_agent"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
