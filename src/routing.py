@@ -15,6 +15,29 @@ that would re-run receptionist on follow-ups.
 
 from langchain_core.messages import HumanMessage
 from typing import Any
+import re
+
+def _latest_user_message(state: Any) -> str:
+    for msg in reversed(state.get("messages", []) or []):
+        if isinstance(msg, HumanMessage):
+            return msg.content or ""
+    return ""
+
+def _extract_patient_name(text: str) -> str | None:
+    if not text:
+        return None
+    patterns = [
+        r"(?:my name is|i am|i'm|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+        r"^(?:hi|hello|hey)[,\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+def _same_patient(left: str | None, right: str | None) -> bool:
+    return bool(left and right and left.strip().lower() == right.strip().lower())
 
 def route_from_start(state: Any) -> str:
     """
@@ -34,9 +57,16 @@ def route_from_start(state: Any) -> str:
     receptionist_done = state.get("receptionist_done", False)
     patient_info = state.get("patient_info")
     next_hint = state.get("next_node")
+    latest_user = _latest_user_message(state)
+    introduced_patient = _extract_patient_name(latest_user)
+    active_patient = state.get("active_patient_name")
 
     print("[ROUTING] route_from_start: stage=%s, receptionist_done=%s, patient_info=%s, next_node=%s" %
           (repr(stage), repr(receptionist_done), "present" if patient_info else "none", repr(next_hint)))
+
+    if introduced_patient and not _same_patient(introduced_patient, active_patient):
+        print("  -> START routing to: patient_data_retrieval (new patient introduction)")
+        return "patient_data_retrieval"
 
     if stage:
         # Trust explicit stage first
@@ -78,12 +108,7 @@ def route_from_receptionist(state) -> str:
     patient_info = state.get("patient_info")
     receptionist_done = state.get("receptionist_done", False)
 
-    messages = state.get("messages", [])
-    latest_user_msg = None
-    for msg in reversed(messages):
-        if isinstance(msg, HumanMessage):
-            latest_user_msg = msg.content
-            break
+    latest_user_msg = _latest_user_message(state) or None
 
     print(f"[ROUTING] route_from_receptionist: hint={next_node_hint}, patient_info={'yes' if patient_info else 'no'}, receptionist_done={receptionist_done}, latest_user_msg_preview={(latest_user_msg[:50]+'...') if latest_user_msg else None}")
 

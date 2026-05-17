@@ -46,8 +46,8 @@ COPY src/ ./src/
 COPY data/ ./data/
 COPY static/ ./static/
 
-# Create necessary directories
-RUN mkdir -p persistence_db logs
+# Create optional log directory. Conversation state is in-memory on Cloud Run.
+RUN mkdir -p logs
 
 # Expose port 5000 (app.py port)
 EXPOSE 5000

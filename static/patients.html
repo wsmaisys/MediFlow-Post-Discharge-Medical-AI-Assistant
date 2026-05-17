@@ -3,23 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dummy Patients — MediFlow</title>
+    <title>Demo Patients - MediFlow</title>
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       rel="stylesheet"
     />
     <style>
-      /* Reuse main design tokens from index for consistent look */
       :root {
         --primary: #0066cc;
         --primary-dark: #004c99;
-        --secondary: #e6f0fa;
         --bg-color: #f8fafc;
         --sidebar-bg: #ffffff;
         --border-color: #e2e8f0;
         --text-primary: #1e293b;
         --text-secondary: #64748b;
-        --success: #10b981;
       }
 
       * {
@@ -27,6 +24,7 @@
         margin: 0;
         padding: 0;
       }
+
       body {
         font-family: Inter, Segoe UI, Roboto, sans-serif;
         background: var(--bg-color);
@@ -42,6 +40,7 @@
         display: flex;
         flex-direction: column;
       }
+
       .sidebar-header {
         padding: 20px;
         border-bottom: 1px solid var(--border-color);
@@ -49,6 +48,7 @@
         align-items: center;
         gap: 10px;
       }
+
       .logo-icon {
         width: 32px;
         height: 32px;
@@ -59,30 +59,41 @@
         justify-content: center;
         color: #fff;
       }
+
       .brand-name {
         font-weight: 700;
       }
+
       .new-chat-wrapper {
         padding: 15px 20px;
       }
-      .new-chat-btn {
-        width: 100%;
-        padding: 12px;
-        background: var(--primary);
-        color: white;
-        border: none;
+
+      .new-chat-btn,
+      .back-link {
+        padding: 10px 12px;
+        background: #fff;
+        color: var(--primary);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         font-weight: 600;
-        cursor: pointer;
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
       }
+
+      .new-chat-btn {
+        width: 100%;
+        background: var(--primary);
+        color: #fff;
+      }
+
       .chat-history {
-        padding: 10px;
+        padding: 10px 20px;
         color: var(--text-secondary);
         font-size: 13px;
+        line-height: 1.5;
       }
 
       .main-container {
@@ -90,29 +101,43 @@
         display: flex;
         flex-direction: column;
       }
+
       .top-bar {
-        height: 60px;
-        background: white;
+        min-height: 60px;
+        background: #fff;
         border-bottom: 1px solid var(--border-color);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 24px;
+        padding: 12px 24px;
+        gap: 16px;
       }
+
       .messages-container {
         flex: 1;
         padding: 24px;
         overflow: auto;
       }
 
+      .container-inner {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .small {
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
       table {
         width: 100%;
         border-collapse: collapse;
-        background: white;
+        background: #fff;
         border: 1px solid var(--border-color);
         border-radius: 8px;
         overflow: hidden;
       }
+
       th,
       td {
         padding: 10px 12px;
@@ -120,27 +145,10 @@
         text-align: left;
         vertical-align: top;
       }
+
       th {
         background: #f8fafc;
         font-weight: 700;
-      }
-      .small {
-        font-size: 13px;
-        color: var(--text-secondary);
-      }
-
-      .back-link {
-        display: inline-block;
-        padding: 8px 12px;
-        background: #fff;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        color: var(--primary);
-        text-decoration: none;
-      }
-      .container-inner {
-        max-width: 1100px;
-        margin: 0 auto;
       }
     </style>
   </head>
@@ -151,25 +159,21 @@
         <div class="brand-name">MediFlow</div>
       </div>
       <div class="new-chat-wrapper">
-        <a href="/" class="new-chat-btn"
-          ><i class="fas fa-arrow-left"></i> Back to Chat</a
-        >
+        <a href="/" class="new-chat-btn"><i class="fas fa-arrow-left"></i> Back to Chat</a>
       </div>
       <div class="chat-history">
-        Dummy patient data from <code>/data/patients.json</code>
+        Demo patient summaries from <code>/api/patients</code>. Use patient name and discharge date in chat to verify a demo record.
       </div>
     </div>
 
     <div class="main-container">
       <div class="top-bar">
         <div>
-          <h2>Dummy Patients</h2>
-          <div class="small">Sample patient discharge summaries for demo</div>
+          <h2>Demo Patients</h2>
+          <div class="small">Summary fields only; detailed discharge data is loaded by verified chat flow.</div>
         </div>
         <div style="display: flex; gap: 8px; align-items: center">
-          <a class="back-link" href="/api/documentation"
-            ><i class="fas fa-book"></i> API Docs</a
-          >
+          <a class="back-link" href="/api/documentation"><i class="fas fa-book"></i> API Docs</a>
           <a class="back-link" href="/"><i class="fas fa-home"></i> Home</a>
         </div>
       </div>
@@ -182,13 +186,12 @@
                 <th>Patient</th>
                 <th>Discharge Date</th>
                 <th>Primary Diagnosis</th>
-                <th>Medications</th>
                 <th>Follow Up</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="small">Loading patient data…</td>
+                <td colspan="4" class="small">Loading patient data...</td>
               </tr>
             </tbody>
           </table>
@@ -197,49 +200,31 @@
     </div>
 
     <script>
-      // Try to load the JSON file from the project data folder
-      const dataPaths = [
-        "../data/patients.json",
-        "/data/patients.json",
-        "data/patients.json",
-      ];
       async function loadPatients() {
         let data = null;
-        for (const p of dataPaths) {
-          try {
-            const res = await fetch(p);
-            if (!res.ok) continue;
-            data = await res.json();
-            break;
-          } catch (e) {
-            // try next
-          }
+        try {
+          const res = await fetch("/api/patients");
+          if (res.ok) data = await res.json();
+        } catch (e) {
+          data = null;
         }
 
+        const patients = Array.isArray(data) ? data : data && data.patients;
         const tbody = document.querySelector("#patientsTable tbody");
         tbody.innerHTML = "";
 
-        if (!data || !Array.isArray(data) || data.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="5" class="small">No patient data found.</td></tr>';
+        if (!patients || !Array.isArray(patients) || patients.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="small">No patient data found.</td></tr>';
           return;
         }
 
-        data.forEach((p) => {
-          const meds = Array.isArray(p.medications)
-            ? p.medications.join("<br>")
-            : p.medications || "—";
+        patients.forEach((patient) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td><strong>${escapeHtml(
-              p.patient_name || "—"
-            )}</strong><div class="small">${escapeHtml(
-            p.primary_diagnosis || ""
-          )}</div></td>
-            <td>${escapeHtml(p.discharge_date || "—")}</td>
-            <td>${escapeHtml(p.primary_diagnosis || "—")}</td>
-            <td>${meds}</td>
-            <td>${escapeHtml(p.follow_up || "—")}</td>
+            <td><strong>${escapeHtml(patient.patient_name || "-")}</strong></td>
+            <td>${escapeHtml(patient.discharge_date || "-")}</td>
+            <td>${escapeHtml(patient.primary_diagnosis || "-")}</td>
+            <td>${escapeHtml(patient.follow_up || "-")}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -247,9 +232,9 @@
 
       function escapeHtml(text) {
         if (!text && text !== 0) return "";
-        const d = document.createElement("div");
-        d.textContent = text;
-        return d.innerHTML;
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
       }
 
       document.addEventListener("DOMContentLoaded", loadPatients);

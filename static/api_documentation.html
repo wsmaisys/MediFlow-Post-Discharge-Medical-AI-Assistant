@@ -125,7 +125,7 @@
           >
           <a
             class="back-link"
-            href="/api/patients"
+            href="/patients"
             style="
               text-decoration: none;
               padding: 8px 10px;
@@ -134,7 +134,7 @@
               color: var(--primary);
               background: #fff;
             "
-            ><i class="fas fa-users"></i> Patients (API)</a
+            ><i class="fas fa-users"></i> Patients</a
           >
         </nav>
       </header>
@@ -168,16 +168,20 @@
               <td>GET</td>
               <td>Serves the main chat UI (HTML).</td>
             </tr>
-            <!-- /patients (HTML) removed from docs: use /api/patients for production-grade API access -->
+            <tr>
+              <td><span class="endpoint">/patients</span></td>
+              <td>GET</td>
+              <td>Serves the demo patient summary page.</td>
+            </tr>
             <tr>
               <td><span class="endpoint">/data/patients.json</span></td>
               <td>GET</td>
-              <td>Returns bundled dummy patient data (JSON).</td>
+              <td>Compatibility endpoint returning sanitized demo patient summaries.</td>
             </tr>
             <tr>
               <td><span class="endpoint">/api/patients</span></td>
               <td>GET</td>
-              <td>API-style endpoint returning the same patient JSON.</td>
+              <td>API endpoint returning sanitized demo patient summaries.</td>
             </tr>
             <tr>
               <td><span class="endpoint">/api/health</span></td>

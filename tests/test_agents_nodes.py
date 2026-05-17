@@ -60,7 +60,7 @@ class TestReceptionistAgentNode:
 class TestClinicalAgentNode:
     """Test clinical agent node."""
     
-    @patch('llm_models.clinical_llm')
+    @patch('agents_nodes.clinical_llm')
     @pytest.mark.asyncio
     async def test_clinical_node_execution(self, mock_clinical_llm):
         """Test clinical agent node execution."""
@@ -70,6 +70,9 @@ class TestClinicalAgentNode:
         mock_llm_instance = MagicMock()
         mock_response = AIMessage(content="Clinical response")
         mock_llm_instance.ainvoke = AsyncMock(return_value=mock_response)
+        async def mock_astream(messages):
+            yield mock_response
+        mock_llm_instance.astream = mock_astream
         mock_clinical_llm.return_value = mock_llm_instance
         
         # Mock the bind_tools method
@@ -106,8 +109,13 @@ class TestClinicalAgentNode:
         
         # The function should handle this without error (may fail due to mocking)
         try:
-            with patch('llm_models.clinical_llm') as mock_llm:
-                mock_llm.return_value = MagicMock()
+            with patch('agents_nodes.clinical_llm') as mock_llm:
+                mock_instance = MagicMock()
+                async def mock_astream(messages):
+                    yield AIMessage(content="Clinical response")
+                mock_instance.astream = mock_astream
+                mock_instance.bind_tools = MagicMock(return_value=mock_instance)
+                mock_llm.return_value = mock_instance
                 result = await clinical_agent_node(state)
                 assert result is not None or True  # Accept as valid
         except Exception:
@@ -125,10 +133,10 @@ class TestPatientDataRetrievalNode:
         from agents_nodes import patient_data_retrieval_node
         from state_and_graph import ChatState
         
-        mock_tool.ainvoke = AsyncMock(return_value='{"discharge": "data"}')
+        mock_tool.ainvoke = AsyncMock(return_value='{"patient_name": "Jane Doe", "discharge_date": "2024-01-15", "primary_diagnosis": "Test"}')
         
         state = ChatState(
-            messages=[HumanMessage(content="My name is Jane Doe")],
+            messages=[HumanMessage(content="My name is Jane Doe. My discharge date is 2024-01-15")],
             patient_info=None,
             next="patient_data_retrieval"
         )
@@ -137,6 +145,7 @@ class TestPatientDataRetrievalNode:
         
         assert 'messages' in result
         assert 'patient_info' in result
+        assert result["patient_verified"] is True
     
     @patch('agents_nodes.patient_data_tool')
     @pytest.mark.asyncio
@@ -156,6 +165,73 @@ class TestPatientDataRetrievalNode:
         assert 'messages' in result
         # Check that the response indicates an error or issue finding the patient
         assert result['messages'][0].content  # Just ensure there's a response
+
+    @patch('agents_nodes.patient_data_tool')
+    @pytest.mark.asyncio
+    async def test_patient_data_retrieval_not_found_does_not_verify(self, mock_tool):
+        """Missing records should not become verified patient context."""
+        from agents_nodes import patient_data_retrieval_node
+        from state_and_graph import ChatState
+
+        mock_tool.ainvoke = AsyncMock(return_value="No patient found with name: Jane Doe")
+
+        state = ChatState(
+            messages=[HumanMessage(content="My name is Jane Doe. My discharge date is 2024-01-15")],
+            patient_info=None,
+            next_node="patient_data_retrieval"
+        )
+
+        result = await patient_data_retrieval_node(state)
+
+        assert result["patient_verified"] is False
+        assert result["patient_info"] is None
+        assert "could not find" in result["messages"][0].content.lower()
+
+    @patch('agents_nodes.patient_data_tool')
+    @pytest.mark.asyncio
+    async def test_patient_data_retrieval_requires_discharge_date(self, mock_tool):
+        """Name alone should not load a patient-specific discharge record."""
+        from agents_nodes import patient_data_retrieval_node
+        from state_and_graph import ChatState
+
+        state = ChatState(
+            messages=[HumanMessage(content="My name is John Smith")],
+            patient_info=None,
+            next_node="patient_data_retrieval"
+        )
+
+        result = await patient_data_retrieval_node(state)
+
+        assert result["patient_verified"] is False
+        assert result["stage"] == "lookup"
+        assert "discharge date" in result["messages"][0].content.lower()
+        mock_tool.ainvoke.assert_not_called()
+
+    @patch('agents_nodes.patient_data_tool')
+    @pytest.mark.asyncio
+    async def test_patient_switch_replaces_verified_context(self, mock_tool):
+        """A new patient candidate must not reuse the previous verified patient."""
+        from agents_nodes import patient_data_retrieval_node
+        from state_and_graph import ChatState
+
+        mock_tool.ainvoke = AsyncMock(return_value='{"patient_name": "Maria Garcia", "discharge_date": "2024-01-18", "primary_diagnosis": "Acute Kidney Injury"}')
+
+        state = ChatState(
+            messages=[HumanMessage(content="My name is Maria Garcia. My discharge date is 2024-01-18")],
+            patient_name="Maria Garcia",
+            patient_discharge_date="2024-01-18",
+            patient_info={"patient_name": "John Smith", "discharge_date": "2024-01-15"},
+            active_patient_name="John Smith",
+            patient_verified=True,
+            stage="lookup",
+        )
+
+        result = await patient_data_retrieval_node(state)
+
+        assert result["patient_verified"] is True
+        assert result["active_patient_name"] == "Maria Garcia"
+        assert result["patient_info"]["primary_diagnosis"] == "Acute Kidney Injury"
+        mock_tool.ainvoke.assert_awaited_once()
 
 
 class TestAgentIntegration:

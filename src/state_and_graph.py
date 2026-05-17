@@ -43,6 +43,10 @@ class ChatState(TypedDict):
     stage: Optional[str]
     receptionist_done: Optional[bool]
     patient_verified: Optional[bool]
+    patient_name: Optional[str]
+    patient_discharge_date: Optional[str]
+    active_patient_name: Optional[str]
+    patient_lookup_error: Optional[str]
 
 
 # Initialize the StateGraph and checkpointer (names preserved)

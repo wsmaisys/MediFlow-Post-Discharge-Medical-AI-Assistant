@@ -499,7 +499,7 @@
           <i class="fas fa-plus"></i> New Consultation
         </button>
         <a
-          href="/api/patients"
+          href="/patients"
           class="new-chat-btn"
           style="
             margin-top: 10px;
@@ -511,7 +511,7 @@
             border: 1px solid var(--border-color);
           "
         >
-          <i class="fas fa-users"></i> View Dummy Patients
+          <i class="fas fa-users"></i> Demo Patients
         </a>
       </div>
 
@@ -548,19 +548,18 @@
       <div class="disclaimer-banner">
         <i class="fas fa-exclamation-triangle"></i>
         <span
-          ><strong>Clinical Warning:</strong> AI-generated responses. Verify all
-          diagnoses and treatment plans with a qualified Medical
-          Practitioner.</span
+          ><strong>Post-discharge safety:</strong> AI-generated support. Verify
+          medication, diet, follow-up, and urgent symptoms with your care team.</span
         >
       </div>
 
       <div class="messages-container" id="messagesContainer">
         <div class="empty-state">
           <i class="fas fa-user-md"></i>
-          <h3>Clinical Decision Support Agent</h3>
+          <h3>Post-Discharge Support Assistant</h3>
           <p>
-            Ready to assist with triage, differential diagnosis, and patient
-            intake.
+            Ask about discharge instructions, medications, diet, follow-up, and
+            warning signs.
           </p>
         </div>
       </div>
@@ -569,7 +568,7 @@
         <div class="input-wrapper">
           <textarea
             id="messageInput"
-            placeholder="Enter patient symptoms or query..."
+            placeholder="Ask about your discharge instructions..."
             rows="1"
           ></textarea>
           <button class="send-btn" id="sendButton">
@@ -594,9 +593,11 @@
         title: document.getElementById("chatTitle"),
       };
 
-      // State
+      // State: keep conversation UI history only for the current browser tab.
+      localStorage.removeItem("mediflow_chats");
+      const chatStore = sessionStorage;
       let state = {
-        chats: JSON.parse(localStorage.getItem("mediflow_chats")) || [],
+        chats: JSON.parse(chatStore.getItem("mediflow_chats")) || [],
         currentChatId: null,
         currentThreadId: null,
         isStreaming: false,
@@ -783,7 +784,10 @@
                 }
               } else if (data.type === "complete") {
                 // Server indicates final completion
-                if (data.thread_id) state.currentThreadId = data.thread_id;
+                if (data.thread_id) {
+                  state.currentThreadId = data.thread_id;
+                  persistCurrentThreadId(data.thread_id);
+                }
 
                 // Final rendering: remove cursor and set final parsed markdown
                 contentContainer.innerHTML = marked.parse(fullContent || (data.text || ""));
@@ -985,18 +989,19 @@
           name: "New Consultation",
           messages: [],
           timestamp: new Date().toISOString(),
+          thread_id: null,
         };
         state.chats.unshift(chat);
         state.currentChatId = newId;
         state.currentThreadId = null;
 
-        localStorage.setItem("mediflow_chats", JSON.stringify(state.chats));
+        chatStore.setItem("mediflow_chats", JSON.stringify(state.chats));
 
         elements.container.innerHTML = `
           <div class="empty-state">
             <i class="fas fa-user-md"></i>
-            <h3>Clinical Decision Support Agent</h3>
-            <p>Ready to assist with triage, differential diagnosis, and patient intake.</p>
+            <h3>Post-Discharge Support Assistant</h3>
+            <p>Ask about discharge instructions, medications, diet, follow-up, and warning signs.</p>
           </div>
         `;
         elements.title.textContent = chat.name;
@@ -1008,7 +1013,7 @@
         if (!chat) return;
 
         state.currentChatId = id;
-        state.currentThreadId = null; // Ideally this should be persisted too
+        state.currentThreadId = chat.thread_id || null;
         elements.title.textContent = chat.name;
 
         elements.container.innerHTML = "";
@@ -1017,7 +1022,7 @@
           elements.container.innerHTML = `
               <div class="empty-state">
                 <i class="fas fa-user-md"></i>
-                <h3>Clinical Decision Support Agent</h3>
+                <h3>Post-Discharge Support Assistant</h3>
               </div>`;
         } else {
           // Render both user and assistant messages (show human + AI only)
@@ -1059,7 +1064,7 @@
 
           chat.name = name;
           elements.title.textContent = name;
-          localStorage.setItem("mediflow_chats", JSON.stringify(state.chats));
+          chatStore.setItem("mediflow_chats", JSON.stringify(state.chats));
           renderHistory();
         }
       }
@@ -1072,7 +1077,16 @@
             isUser,
             timestamp: new Date().toISOString(),
           });
-          localStorage.setItem("mediflow_chats", JSON.stringify(state.chats));
+          chatStore.setItem("mediflow_chats", JSON.stringify(state.chats));
+        }
+      }
+
+      function persistCurrentThreadId(threadId) {
+        const chat = state.chats.find((c) => c.id === state.currentChatId);
+        if (chat) {
+          chat.thread_id = threadId;
+          chatStore.setItem("mediflow_chats", JSON.stringify(state.chats));
+          renderHistory();
         }
       }
 

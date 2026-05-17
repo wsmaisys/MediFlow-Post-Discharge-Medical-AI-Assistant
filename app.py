@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 
 # Third-party imports
 from fastapi import FastAPI, HTTPException # Third-party import for FastAPI framework and HTTPException for error handling
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse # Third-party imports for HTML, JSON, redirect and streaming responses
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse # Third-party imports for HTML, JSON and streaming responses
 from fastapi.staticfiles import StaticFiles # Third-party import for serving static files
 from fastapi.middleware.cors import CORSMiddleware # Third-party import for Cross-Origin Resource Sharing middleware
 import uvicorn # Third-party import for running the ASGI server
@@ -57,6 +57,22 @@ chatbot = None
 # Configure basic logging for the application
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+PATIENTS_DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "patients.json")
+
+def load_demo_patients():
+    """Load bundled demo patient records from disk."""
+    with open(PATIENTS_DATA_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def patient_summary(patient: dict) -> dict:
+    """Return non-detailed demo fields suitable for list views."""
+    return {
+        "patient_name": patient.get("patient_name"),
+        "discharge_date": patient.get("discharge_date"),
+        "primary_diagnosis": patient.get("primary_diagnosis"),
+        "follow_up": patient.get("follow_up"),
+    }
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -295,21 +311,16 @@ async def chat_stream(chat_message: ChatMessage): # Asynchronous function to han
 
 @app.get("/api/threads") # Decorator to define a GET endpoint for retrieving all threads
 async def get_threads(): # Asynchronous function to retrieve all conversation threads
-    """Get all conversation threads from the checkpointer."""
+    """Return thread capability information for the in-memory deployment."""
     try: # Error handling block
         if not chatbot:
             raise HTTPException(status_code=503, detail="Chatbot not initialized")
-        
-        # Get all threads from the checkpointer
-        # The checkpointer stores state with thread IDs as keys
-        # This is a simplified version - in production you might need to query the database directly
-        threads = []
-        
-        # For now, return empty list as we don't have direct access to all thread IDs
-        # In production, you would query the SQLite database directly
-        return { # Return a dictionary that FastAPI will automatically convert to JSON
-            "threads": threads, # List of thread IDs
-            "count": len(threads) # Number of threads found
+
+        return {
+            "threads": [],
+            "count": 0,
+            "persistence": "in_memory",
+            "message": "Thread listing is unavailable with the current in-memory Cloud Run deployment. Continue conversations with the thread_id returned during the active instance session.",
         }
     except HTTPException as e:
         raise e
@@ -335,8 +346,15 @@ async def serve_index_html():
         raise HTTPException(status_code=404, detail="index.html not found")
 
 
-# Note: we intentionally do not expose `/patients.html` directly. Keep a
-# single canonical route `/patients` which serves the patients page.
+@app.get("/patients")
+async def serve_patients_page():
+    """Serve the demo patient list page."""
+    try:
+        with open("static/patients.html", "r", encoding="utf-8") as f:
+            content = f.read()
+        return HTMLResponse(content=content, status_code=200)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="patients.html not found")
 
 
 @app.get("/api/documentation")
@@ -350,21 +368,12 @@ async def serve_api_documentation():
         raise HTTPException(status_code=404, detail="api_documentation.html not found")
 
 
-# Removed `/patients` HTML route to keep a minimal API surface.
-# The canonical API endpoint for patient data remains `/api/patients`.
-
-
 @app.get("/data/patients.json")
 async def serve_patients_file():
-    """Serve the bundled `data/patients.json` file for the static UI.
-
-    This endpoint mirrors a static file path so client-side pages can fetch
-    `/data/patients.json` without requiring the `data` folder to be mounted.
-    """
+    """Compatibility endpoint returning sanitized demo patient summaries."""
     try:
-        with open("data/patients.json", "r", encoding="utf-8") as f:
-            patients = json.load(f)
-        return JSONResponse(content=patients)
+        patients = load_demo_patients()
+        return JSONResponse(content=[patient_summary(patient) for patient in patients])
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="patients.json not found")
     except Exception as e:
@@ -373,14 +382,18 @@ async def serve_patients_file():
 
 @app.get("/api/patients")
 async def api_get_patients():
-    """API-friendly endpoint returning the same dummy patient data.
-    """
+    """Return sanitized demo patient summaries as JSON."""
     try:
-        with open("static/patients.html", "r", encoding="utf-8") as f:
-            content = f.read()
-        return HTMLResponse(content=content, status_code=200)
+        patients = load_demo_patients()
+        return JSONResponse(content={
+            "patients": [patient_summary(patient) for patient in patients],
+            "count": len(patients),
+            "demo_verification": "Use patient_name plus discharge_date in chat to load the matching demo record.",
+        })
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="patients.html not found")
+        raise HTTPException(status_code=404, detail="patients.json not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == '__main__': # Standard boilerplate to run the application directly

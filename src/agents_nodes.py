@@ -3,6 +3,7 @@ agents_nodes.py  — Fixed for Mistral API message ordering requirements
 """
 from typing import Any
 import re
+import json
 from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
@@ -163,6 +164,60 @@ def _extract_patient_name(text: str) -> str | None:
             return match.group(1).strip()
     return None
 
+def _same_patient(left: str | None, right: str | None) -> bool:
+    return bool(left and right and left.strip().lower() == right.strip().lower())
+
+def _extract_discharge_date(text: str) -> str | None:
+    if not text:
+        return None
+    iso_match = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", text)
+    if iso_match:
+        return iso_match.group(1)
+    slash_match = re.search(r"\b(20\d{2})[/-](\d{1,2})[/-](\d{1,2})\b", text)
+    if slash_match:
+        year, month, day = slash_match.groups()
+        return f"{year}-{int(month):02d}-{int(day):02d}"
+    return None
+
+def _parse_patient_record(patient_data: str) -> dict | None:
+    if not patient_data or patient_data.startswith("No patient found") or "not found" in patient_data.lower():
+        return None
+    try:
+        parsed = json.loads(patient_data)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+def _patient_display_name(patient_info: Any) -> str | None:
+    if isinstance(patient_info, dict):
+        return patient_info.get("patient_name") or patient_info.get("name")
+    if isinstance(patient_info, str):
+        parsed = _parse_patient_record(patient_info)
+        if parsed:
+            return parsed.get("patient_name") or parsed.get("name")
+    return None
+
+def _format_patient_context(patient_info: Any) -> str:
+    if isinstance(patient_info, str):
+        parsed = _parse_patient_record(patient_info)
+        patient = parsed if parsed else {"raw_patient_data": patient_info}
+    elif isinstance(patient_info, dict):
+        patient = patient_info
+    else:
+        patient = {}
+    allowed = {
+        "patient_name",
+        "discharge_date",
+        "primary_diagnosis",
+        "medications",
+        "dietary_restrictions",
+        "follow_up",
+        "warning_signs",
+        "discharge_instructions",
+    }
+    safe_patient = {key: patient.get(key) for key in allowed if key in patient}
+    return json.dumps(safe_patient, indent=2)
+
 def _get_latest_user_message(messages: list[BaseMessage]) -> str:
     for message in reversed(messages or []):
         if isinstance(message, HumanMessage):
@@ -272,7 +327,7 @@ async def receptionist_agent_node(state: dict) -> dict:
     result: dict[str, Any] = {}
     
     if extracted_name and not state.get("patient_info"):
-        response = AIMessage(content="Thank you for introducing yourself. Let me look up your medical records.")
+        response = AIMessage(content="Thank you for introducing yourself. Please provide your discharge date in YYYY-MM-DD format so I can verify the demo record.")
         result["messages"] = [response]
         result["next_node"] = "lookup_patient"
         result["patient_name"] = extracted_name
@@ -300,34 +355,83 @@ async def patient_data_retrieval_node(state: dict) -> dict:
     """
     Look up patient information.
     """
-    if state.get("patient_verified"):
-        print("[LOOKUP] patient_data_retrieval_node skipped because patient_verified=True")
-        return {}
-    
     patient_name = state.get("patient_name")
     if not patient_name:
         latest_user = _get_latest_user_message(state.get("messages", []))
         patient_name = _extract_patient_name(latest_user)
+
+    if state.get("patient_verified") and _same_patient(patient_name, state.get("active_patient_name")):
+        print("[LOOKUP] patient_data_retrieval_node skipped because active patient is already verified")
+        return {}
+
+    discharge_date = state.get("patient_discharge_date") or _extract_discharge_date(
+        _get_latest_user_message(state.get("messages", []))
+    )
     
     if not patient_name:
         msg = AIMessage(content="I need your name to look up your records. Could you please introduce yourself?")
         return {"messages": [msg]}
+    if not discharge_date:
+        msg = AIMessage(content=f"Thanks, {patient_name}. Please provide your discharge date in YYYY-MM-DD format to verify the demo record before I load patient-specific details.")
+        return {
+                "messages": [msg],
+                "patient_name": patient_name,
+                "patient_info": None,
+                "patient_verified": False,
+                "active_patient_name": None,
+                "stage": "lookup",
+            }
     
     try:
         print(f"[LOOKUP] Calling patient_data_tool for '{patient_name}'")
         patient_data = await patient_data_tool.ainvoke(patient_name)
+        patient_record = _parse_patient_record(patient_data)
+        if not patient_record:
+            msg = AIMessage(content=f"I could not find a discharge record for {patient_name}. Please check the spelling or start a new lookup with the full name.")
+            return {
+                "messages": [msg],
+                "patient_name": patient_name,
+                "patient_info": None,
+                "patient_verified": False,
+                "patient_lookup_error": patient_data,
+                "stage": "lookup",
+                "active_patient_name": None,
+            }
+        expected_discharge_date = patient_record.get("discharge_date")
+        if expected_discharge_date != discharge_date:
+            msg = AIMessage(content="The discharge date does not match the demo record for that name. Please check the date and try again, or contact support if this is urgent.")
+            return {
+                "messages": [msg],
+                "patient_name": patient_name,
+                "patient_discharge_date": None,
+                "patient_info": None,
+                "patient_verified": False,
+                "patient_lookup_error": "discharge_date_mismatch",
+                "stage": "lookup",
+                "active_patient_name": None,
+            }
         confirmation = AIMessage(content="I found your records. Now I'll connect you with clinical support.")
         
         return {
             "messages": [confirmation],
-            "patient_info": patient_data,
+            "patient_info": patient_record,
             "patient_verified": True,
             "stage": "clinical",
+            "active_patient_name": patient_record.get("patient_name") or patient_name,
+            "patient_discharge_date": discharge_date,
+            "patient_lookup_error": None,
         }
     except Exception as error:
         print(f"[LOOKUP] patient_data_tool error: {error}")
         err_msg = AIMessage(content=f"I couldn't find records for {patient_name}. Please check the name or contact support.")
-        return {"messages": [err_msg]}
+        return {
+            "messages": [err_msg],
+            "patient_info": None,
+            "patient_verified": False,
+            "patient_lookup_error": str(error),
+            "stage": "lookup",
+            "active_patient_name": None,
+        }
 
 # ---------------------------
 # Node: clinical_agent_node
@@ -347,18 +451,30 @@ async def clinical_agent_node(state: dict) -> dict:
     print(f"[CLIN] Running clinical_agent_node: messages={len(messages)}, patient_info={'yes' if patient_info else 'no'}")
     
     # Prepare system instruction
+    active_patient_name = state.get("active_patient_name") or _patient_display_name(patient_info)
+    latest_user = _get_latest_user_message(messages)
     system_instruction = (
-        "You are an expert clinical assistant specialized in post-discharge patient support and nephrology. "
-        "Follow safety guidance and remind users to consult their healthcare provider. "
-        "If patient-specific information is required (meds, doses, restrictions) and patient data is available, use it."
+        "You are MediFlow, a post-discharge medical assistant focused on nephrology support. "
+        "You are not a replacement for a clinician and must give safety-first guidance. "
+        "Ground patient-specific answers only in the Patient Data block provided in this conversation; never invent medications, doses, diagnoses, lab values, dates, restrictions, or follow-up plans. "
+        "If patient data is missing, say you do not have the discharge record loaded and ask the user to provide their full name before answering patient-specific questions. "
+        "For general nephrology education, prefer the nephrology knowledge-base tool. For current guidelines, trials, approvals, recalls, or news, use web search. "
+        "When tool evidence is unavailable or insufficient, clearly say what is unknown and suggest contacting the discharge team or clinician. "
+        "Keep responses concise, practical, and include urgent red flags when relevant."
     )
     llm_messages = [SystemMessage(content=system_instruction)]
     
     # Add patient context if available
     if patient_info:
-        patient_context = f"Patient Data: {str(patient_info)[:400]}"
+        patient_context = (
+            f"Active patient: {active_patient_name or 'unknown'}\n"
+            f"Patient Data from discharge record:\n{_format_patient_context(patient_info)}"
+        )
         llm_messages.append(HumanMessage(content=patient_context))
         llm_messages.append(AIMessage(content="I have reviewed the patient data and can provide guidance."))
+    elif latest_user and any(term in latest_user.lower() for term in ["my medication", "my medications", "my dose", "my follow", "my restriction", "my diagnosis", "my discharge", "my warning"]):
+        msg = AIMessage(content="I do not have your discharge record loaded yet, so I cannot safely answer patient-specific questions. Please provide your full name as written on the discharge paperwork so I can look up the demo record, or contact your discharge team for urgent concerns.")
+        return {"messages": [msg]}
     
     # Append conversation history with sanitization for Mistral API
     for m in messages:
@@ -441,7 +557,6 @@ async def clinical_agent_node(state: dict) -> dict:
             tool_calls_list = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
             print(f"[CLIN] Aggregated {len(tool_calls_list)} tool calls")
             
-            latest_user = _get_latest_user_message(messages)
             if latest_user:
                 for tc in tool_calls_list:
                     ok, explain = _validate_tool_invocation(latest_user, tc.get("name", "unknown"))

@@ -157,16 +157,23 @@ class TestToolsDefinition:
     
     def test_clinical_tools_defined(self):
         """Test clinical agent tools list."""
-        from tools import clinical_agent_tools
+        from tools import clinical_agent_tools, patient_data_tool
         
         assert isinstance(clinical_agent_tools, list)
         assert len(clinical_agent_tools) > 0
+        assert patient_data_tool not in clinical_agent_tools
     
     def test_nephrology_tool_assigned(self):
         """Test nephrology tool is assigned."""
         from tools import nephrology_tool, query_nephrology_docs
         
         assert nephrology_tool == query_nephrology_docs
+
+    def test_nephrology_mcp_url_configured(self):
+        """MediFlow should consume the public MCP service through config."""
+        from tools import NEPHROLOGY_MCP_URL
+
+        assert NEPHROLOGY_MCP_URL.endswith("/mcp")
     
     def test_patient_data_tool_assigned(self):
         """Test patient data tool is assigned."""

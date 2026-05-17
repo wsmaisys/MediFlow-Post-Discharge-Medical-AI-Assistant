@@ -6,11 +6,16 @@ Kept minimal to reduce complexity.
 # Standard library imports for HTTP and file operations
 import aiohttp
 import json
+import os
 import uuid
 # LangChain tool decorator for defining functions as tools
 from langchain_core.tools import tool
 # DuckDuckGo for web search
 from langchain_community.tools import DuckDuckGoSearchRun
+
+DEFAULT_NEPHROLOGY_MCP_URL = "https://nephrology-rag-mcp-tool-785629432566.us-central1.run.app/mcp"
+NEPHROLOGY_MCP_URL = os.getenv("NEPHROLOGY_MCP_URL", DEFAULT_NEPHROLOGY_MCP_URL)
+NEPHROLOGY_MCP_TIMEOUT_SECONDS = int(os.getenv("NEPHROLOGY_MCP_TIMEOUT_SECONDS", "30"))
 
 
 # Tool 1: Web search using DuckDuckGo (free search engine)
@@ -42,9 +47,6 @@ async def query_nephrology_docs(query: str, k: int = 3) -> str:
     Returns:
         Relevant clinical information from the knowledge base
     """
-    # URL of the deployed MCP RAG server
-    MCP_URL = "https://nephrology-rag-mcp-tool-785629432566.us-central1.run.app/mcp"
-    
     # Generate a unique session ID for this request
     session_id = str(uuid.uuid4())
     
@@ -57,7 +59,8 @@ async def query_nephrology_docs(query: str, k: int = 3) -> str:
             "name": "query_nephrology_docs",  # Specific tool name
             "arguments": {
                 "query": query,  # The search query
-                "k": k  # Number of results
+                "k": k,  # Number of results
+                "source_client": "mediflow-agent"
             }
         }
     }
@@ -66,14 +69,15 @@ async def query_nephrology_docs(query: str, k: int = 3) -> str:
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-Session-Id": session_id
+        "X-Session-Id": session_id,
+        "X-Source-Client": "mediflow-agent"
     }
     
     try:
         # Create async HTTP session
         async with aiohttp.ClientSession() as session:
             # Send POST request to RAG server
-            async with session.post(MCP_URL, json=payload, headers=headers, timeout=30) as resp:
+            async with session.post(NEPHROLOGY_MCP_URL, json=payload, headers=headers, timeout=NEPHROLOGY_MCP_TIMEOUT_SECONDS) as resp:
                 # Check if request was successful
                 if resp.status == 200:
                     # Parse response as JSON
@@ -139,14 +143,15 @@ async def get_patient_discharge_report(patient_name: str) -> str:
     """
     try:
         # Open the patients database file
-        with open("data/patients.json", "r") as f:
+        data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "patients.json")
+        with open(data_path, "r", encoding="utf-8") as f:
             # Parse JSON file
             patients = json.load(f)
         
         # Search for exact name match (case-insensitive)
         for patient in patients:
             # Get patient name from database
-            db_name = patient.get("patient_name", "")
+            db_name = patient.get("patient_name") or patient.get("name", "")
             # Compare with query (case-insensitive)
             if db_name.lower() == patient_name.lower():
                 # Return full patient record as formatted JSON
@@ -155,7 +160,7 @@ async def get_patient_discharge_report(patient_name: str) -> str:
         # If no exact match, try partial match (first or last name)
         for patient in patients:
             # Get full name and split into parts
-            full_name = patient.get("patient_name", "")
+            full_name = patient.get("patient_name") or patient.get("name", "")
             name_parts = full_name.lower().split()
             # Check if query matches any part of the name
             if patient_name.lower() in name_parts:
@@ -208,7 +213,6 @@ patient_data_tool = get_patient_discharge_report
 clinical_agent_tools = [
     search_web,  # For general web search
     query_nephrology_docs,  # For medical knowledge base
-    patient_data_tool  # For patient records
 ]
 
 # Tools available to the receptionist - include patient lookup for reception tasks

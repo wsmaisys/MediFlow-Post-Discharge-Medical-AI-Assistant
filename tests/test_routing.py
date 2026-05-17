@@ -110,6 +110,25 @@ class TestRoutingEdgeCases:
         
         assert route1 == route2
 
+    def test_start_routes_new_patient_intro_to_lookup_even_after_clinical_stage(self):
+        """A new patient introduction inside an existing thread must trigger lookup."""
+        from routing import route_from_start
+        from state_and_graph import ChatState
+        from langchain_core.messages import HumanMessage
+
+        state = ChatState(
+            messages=[HumanMessage(content="My name is Maria Garcia")],
+            patient_info={"patient_name": "John Smith"},
+            active_patient_name="John Smith",
+            next_node=None,
+            stage="clinical",
+            receptionist_done=True,
+            patient_verified=True,
+        )
+
+        route = route_from_start(state)
+        assert route == "patient_data_retrieval"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
